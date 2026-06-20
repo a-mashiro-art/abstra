@@ -951,17 +951,7 @@ $('saveBtn').onclick=()=>{
   const ectx=ex.getContext('2d');
   ectx.imageSmoothingQuality='high';
   ectx.drawImage(rc,0,0,ex.width,ex.height);
-  let out=ex;
-  if(matColor!=='none'){
-    const bd=Math.round(longEdge*0.06);
-    const m=document.createElement('canvas');
-    m.width=ex.width+bd*2; m.height=ex.height+bd*2;
-    const mc=m.getContext('2d');
-    mc.fillStyle=matColor; mc.fillRect(0,0,m.width,m.height);
-    mc.drawImage(ex,bd,bd);
-    out=m;
-  }
-  let bytes=dataURLtoBytes(out.toDataURL('image/png'));
+  let bytes=dataURLtoBytes(ex.toDataURL('image/png'));
   bytes=addPngMeta(bytes, buildPngMeta());
   const blob=new Blob([bytes],{type:'image/png'});
   saveOrShare(blob, fileStamp()+'.png', 'Saved (long edge '+longEdge+'px)');
@@ -973,17 +963,11 @@ function saveGif(){
   const cw=composed.width, ch=composed.height, sc=longEdge/Math.max(cw,ch);
   const w=Math.round(cw*sc), h=Math.round(ch*sc);
   const base=makeBase(w,h);
-  const g=document.createElement('canvas'); g.width=w; g.height=h;
-  const gctx=g.getContext('2d');
-  const bd=(matColor!=='none')?Math.round(longEdge*0.06):0;
-  const fw=w+bd*2, fh=h+bd*2;
-  const tmp=document.createElement('canvas'); tmp.width=fw; tmp.height=fh;
+  const tmp=document.createElement('canvas'); tmp.width=w; tmp.height=h;
   const tctx=tmp.getContext('2d');
-  const gif=new GIF({workers:2, quality:10, width:fw, height:fh, workerScript:GIF_WORKER});
+  const gif=new GIF({workers:2, quality:10, width:w, height:h, workerScript:GIF_WORKER});
   for(let f=0; f<GFRAMES; f++){
-    drawGlitch(base, gctx, w, h, glitchSeed*GFRAMES+f);
-    if(matColor!=='none'){ tctx.fillStyle=matColor; tctx.fillRect(0,0,fw,fh); }
-    tctx.drawImage(g, bd, bd);
+    drawGlitch(base, tctx, w, h, glitchSeed*GFRAMES+f);
     gif.addFrame(tctx, {copy:true, delay:glitchSpeed});
   }
   gif.on('finished', async blob=>{
