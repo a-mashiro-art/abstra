@@ -223,8 +223,8 @@
       <div class="topctrls" id="topctrls">
         <span class="brand-inline mono">Abstra</span>
         <div class="modebar mono" id="modebar">
-          <button data-mode="still" class="active">スチール</button>
-          <button data-mode="glitch">グリッチ</button>
+          <button data-mode="still" class="active">Still</button>
+          <button data-mode="glitch">Glitch</button>
         </div>
         <div class="ratiobar mono" id="ratiobar">
           <button data-r="1:1" class="active">1:1</button>
@@ -232,17 +232,17 @@
           <button data-r="16:9">16:9</button>
         </div>
       </div>
-      <div class="busy mono" id="busy">文字を除去中…</div>
+      <div class="busy mono" id="busy">Removing text…</div>
       <div class="brandCorner mono" id="brandCorner">Abstra</div>
       <div class="camBottom">
         <div class="strip" id="strip"></div>
         <div class="controls">
           <div class="ctrl-group leftg">
-            <button class="ctrl-btn primary-btn mono" id="composeBtn" disabled>合成</button>
+            <button class="ctrl-btn primary-btn mono" id="composeBtn" disabled>Merge</button>
           </div>
           <button class="shutter" id="shutterBtn"><span></span></button>
           <div class="ctrl-group right">
-            <button class="ctrl-btn tgl on mono" id="txtbtn">文字</button>
+            <button class="ctrl-btn tgl on mono" id="txtbtn">Text</button>
             <button class="ctrl-btn tgl mono" id="strobeBtn">⚡</button>
           </div>
         </div>
@@ -255,52 +255,52 @@
     <div class="stage" id="editStage" style="flex:1;">
       <canvas id="result"></canvas>
     </div>
-    <button class="adv-toggle mono" id="advToggle">調整 ▸</button>
+    <button class="adv-toggle mono" id="advToggle">Adjust ▸</button>
     <div class="adv-panel" id="advPanel">
       <div class="blendrow">
-        <span class="blabel mono">重ね方</span>
+        <span class="blabel mono">Blend</span>
         <select id="blendSel" class="mono"></select>
       </div>
       <div class="blendrow stillonly">
-        <span class="blabel mono">エフェクト</span>
+        <span class="blabel mono">Effect</span>
         <select id="effectSel" class="mono">
-          <option value="normal">ノーマル</option>
-          <option value="noise">ノイズ</option>
+          <option value="normal">Normal</option>
+          <option value="noise">Noise</option>
           <option value="8bit">8bit</option>
           <option value="16bit">16bit</option>
         </select>
       </div>
       <div class="blendrow glitchonly">
-        <span class="blabel mono">グリッチ柄</span>
+        <span class="blabel mono">Glitch</span>
         <div class="bgtoggle mono" id="patToggle">
-          <button data-pat="0" class="active">スライス</button>
-          <button data-pat="1">ブロック</button>
-          <button data-pat="2">ウェーブ</button>
+          <button data-pat="0" class="active">Slice</button>
+          <button data-pat="1">Block</button>
+          <button data-pat="2">Wave</button>
         </div>
       </div>
       <div class="blendrow glitchonly">
-        <span class="blabel mono">点滅速度</span>
+        <span class="blabel mono">Speed</span>
         <div class="bgtoggle mono" id="speedToggle">
-          <button data-ms="150">遅</button>
-          <button data-ms="95" class="active">中</button>
-          <button data-ms="50">速</button>
+          <button data-ms="150">Slow</button>
+          <button data-ms="95" class="active">Mid</button>
+          <button data-ms="50">Fast</button>
         </div>
       </div>
       <div class="blendrow">
-        <span class="blabel mono">周囲</span>
+        <span class="blabel mono">Border</span>
         <div class="bgtoggle mono" id="matToggle">
-          <button data-mat="none" class="active">なし</button>
-          <button data-mat="#000">黒</button>
-          <button data-mat="#fff">白</button>
+          <button data-mat="none" class="active">None</button>
+          <button data-mat="#000">Black</button>
+          <button data-mat="#fff">White</button>
         </div>
       </div>
       <div class="blendrow">
-        <span class="blabel mono">作者</span>
-        <input id="authorInput" class="mono" type="text" placeholder="名前（任意）">
+        <span class="blabel mono">Artist</span>
+        <input id="authorInput" class="mono" type="text" placeholder="Name (optional)">
       </div>
     </div>
     <div class="savebar">
-      <span class="blabel mono">保存サイズ 長辺</span>
+      <span class="blabel mono">Size (long edge)</span>
       <select id="sizeSel" class="mono">
         <option value="1920">1920 px</option>
         <option value="2560">2560 px</option>
@@ -309,16 +309,16 @@
       </select>
     </div>
     <div class="editbar">
-      <button class="ghost mono" id="backBtn">← 撮り直す</button>
-      <button class="mono" id="rerollAllBtn">別パターン</button>
-      <button class="primary mono" id="saveBtn">保存</button>
+      <button class="ghost mono" id="backBtn">← Retake</button>
+      <button class="mono" id="rerollAllBtn">Variation</button>
+      <button class="primary mono" id="saveBtn">Save</button>
     </div>
   </div>
 
 </div>
 <div class="toast mono" id="toast"></div>
 <div class="flash" id="flash"></div>
-<div class="preview" id="preview"><img id="previewImg" alt=""><button class="prev-del" id="prevDel" aria-label="削除">✕</button></div>
+<div class="preview" id="preview"><img id="previewImg" alt=""><button class="prev-del" id="prevDel" aria-label="Delete">✕</button></div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
@@ -339,10 +339,10 @@ let strobe=false, torchTrack=null, torchOK=false;
 let ocrWorker=null, ocrReady=false;
 
 const BLENDS=[
-  ['lighten','比較(明)'],['darken','比較(暗)'],
-  ['overlay','オーバーレイ'],['hard-light','ハードライト'],
-  ['difference','差の絶対値'],
-  ['hue','色相'],['saturation','彩度'],['color','カラー'],['luminosity','輝度']
+  ['lighten','Lighten'],['darken','Darken'],
+  ['overlay','Overlay'],['hard-light','Hard Light'],
+  ['difference','Difference'],
+  ['hue','Hue'],['saturation','Saturation'],['color','Color'],['luminosity','Luminosity']
 ];
 
 const $=id=>document.getElementById(id);
@@ -358,7 +358,7 @@ async function startCam(){
     const caps=torchTrack.getCapabilities ? torchTrack.getCapabilities() : {};
     torchOK=!!caps.torch;
     if(strobe && torchOK){ try{ await torchTrack.applyConstraints({advanced:[{torch:true}]}); }catch(e){} }
-  }catch(e){ toast('カメラを起動できません: '+e.message); }
+  }catch(e){ toast('Cannot start camera: '+e.message); }
 }
 
 function toast(msg){
@@ -442,9 +442,9 @@ function layoutFrame(){
 
 async function capture(){
   if(busy) return;
-  if(photos.length>=MAX){ toast('最大'+MAX+'枚です'); return; }
+  if(photos.length>=MAX){ toast('Max '+MAX+' photos'); return; }
   const vw=video.videoWidth, vh=video.videoHeight;
-  if(!vw){ toast('カメラ準備中'); return; }
+  if(!vw){ toast('Camera loading'); return; }
 
 
   // ストロボ：トーチ非対応端末では画面フラッシュで照らす
@@ -725,7 +725,7 @@ function updateSizeLock(){
   const sel=$('sizeSel'); if(!sel) return;
   let opt=sel.querySelector('option[value="480"]');
   if(mode==='glitch'){
-    if(!opt){ opt=document.createElement('option'); opt.value='480'; opt.textContent='480 px（固定）'; sel.insertBefore(opt, sel.firstChild); }
+    if(!opt){ opt=document.createElement('option'); opt.value='480'; opt.textContent='480 px (fixed)'; sel.insertBefore(opt, sel.firstChild); }
     sel.value='480'; sel.disabled=true;
   }else{
     if(opt) opt.remove();
@@ -829,7 +829,7 @@ $('speedToggle').onclick=e=>{
 
 $('advToggle').onclick=()=>{
   const open=$('advPanel').classList.toggle('open');
-  $('advToggle').textContent=open?'調整 ▾':'調整 ▸';
+  $('advToggle').textContent=open?'Adjust ▾':'Adjust ▸';
 };
 
 function dataURLtoBlob(durl){
@@ -964,11 +964,11 @@ $('saveBtn').onclick=()=>{
   let bytes=dataURLtoBytes(out.toDataURL('image/png'));
   bytes=addPngMeta(bytes, buildPngMeta());
   const blob=new Blob([bytes],{type:'image/png'});
-  saveOrShare(blob, fileStamp()+'.png', '保存しました（長辺 '+longEdge+'px）');
+  saveOrShare(blob, fileStamp()+'.png', 'Saved (long edge '+longEdge+'px)');
 };
 
 function saveGif(){
-  if(typeof GIF==='undefined'){ toast('GIFライブラリ未読込（オンライン環境で再試行）'); return; }
+  if(typeof GIF==='undefined'){ toast('GIF library not loaded (retry online)'); return; }
   const longEdge=480;
   const cw=composed.width, ch=composed.height, sc=longEdge/Math.max(cw,ch);
   const w=Math.round(cw*sc), h=Math.round(ch*sc);
@@ -991,14 +991,14 @@ function saveGif(){
       const buf=new Uint8Array(await blob.arrayBuffer());
       blob=new Blob([addGifComment(buf, metaText())], {type:'image/gif'});
     }catch(e){}
-    saveOrShare(blob, fileStamp()+'.gif', 'GIFを保存しました');
+    saveOrShare(blob, fileStamp()+'.gif', 'GIF saved');
   });
-  toast('GIF生成中…'); gif.render();
+  toast('Generating GIF…'); gif.render();
 }
 
 document.querySelectorAll('#ratiobar button').forEach(b=>{
   b.onclick=()=>{
-    if(photos.length){ toast('撮影中は比率を変更できません'); return; }
+    if(photos.length){ toast('Cannot change ratio while shooting'); return; }
     const parts=b.dataset.r.split(':').map(Number);
     ratio={key:b.dataset.r,w:Math.min(...parts),h:Math.max(...parts)};
     document.querySelectorAll('#ratiobar button').forEach(x=>x.classList.toggle('active',x===b));
@@ -1008,7 +1008,7 @@ document.querySelectorAll('#ratiobar button').forEach(b=>{
 
 document.querySelectorAll('#modebar button').forEach(b=>{
   b.onclick=()=>{
-    if(photos.length){ toast('撮影中はモードを変更できません'); return; }
+    if(photos.length){ toast('Cannot change mode while shooting'); return; }
     mode=b.dataset.mode;
     document.querySelectorAll('#modebar button').forEach(x=>x.classList.toggle('active',x===b));
   };
