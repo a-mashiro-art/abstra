@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Abstra</title>
+<style>
+  :root{
+    --bg:#0b0b0d;
+    --panel:#131316;
+    --line:#26262b;
+    --ink:#e7e6e1;
+    --dim:#7d7d83;
+    --accent:#c8442b;     /* 朱 vermilion */
+    --shutter:#e7e6e1;
+    --field:#000;
+  }
+  body.light{
+    --bg:#f4f3ee;
+    --panel:#ffffff;
+    --line:#dcdad2;
+    --ink:#1b1b1e;
+    --dim:#8d8c83;
+    --shutter:#1b1b1e;
+    --field:#efece4;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font-family:"Helvetica Neue",Arial,"Hiragino Kaku Gothic ProN",sans-serif;
+    overscroll-behavior:none;}
+  .mono{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+    letter-spacing:.04em;}
+  #app{position:fixed;inset:0;display:flex;flex-direction:column;}
+
+  /* top bar */
+  .topbar{display:flex;align-items:center;justify-content:space-between;
+    padding:calc(env(safe-area-inset-top) + 14px) 18px 12px;
+    border-bottom:1px solid var(--line);position:relative;z-index:3;}
+  .brand{font-size:13px;letter-spacing:.34em;font-weight:600;}
+  .brand .dot{color:var(--accent);}
+  .counter{font-size:12px;color:var(--dim);}
+  .counter b{color:var(--ink);font-weight:600;}
+
+  /* stage */
+  .stage{position:relative;flex:1;overflow:hidden;background:#000;}
+  video,#result{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+  video{transform-origin:center center;}
+  #result{object-fit:contain;background:var(--bg);display:none;}
+  #editStage{transition:background .15s;}
+  #result.mat{top:5%;left:5%;width:90%;height:90%;}
+  #result.fs{position:fixed;inset:0;width:100vw;height:100vh;z-index:50;cursor:zoom-out;}
+
+  .frame{position:absolute;pointer-events:none;z-index:2;
+    box-shadow:0 0 0 9999px rgba(0,0,0,.5);
+    outline:1px solid rgba(255,255,255,.55);}
+  .topctrls{position:absolute;top:calc(env(safe-area-inset-top) + 16px);left:10px;right:10px;z-index:4;
+    display:flex;justify-content:flex-end;align-items:center;gap:20px;flex-wrap:nowrap;}
+  .brand-inline{position:absolute;left:0;top:50%;transform:translateY(-50%);
+    font-size:13px;letter-spacing:.16em;font-weight:600;color:var(--ink);
+    white-space:nowrap;text-shadow:0 1px 4px rgba(0,0,0,.85);}
+  .ratiobar,.modebar{display:flex;gap:2px;background:rgba(0,0,0,.55);
+    border:1px solid var(--line);border-radius:3px;padding:2px;flex:0 0 auto;}
+  .ratiobar button,.modebar button{background:none;border:none;color:var(--dim);
+    font-size:11px;padding:6px 9px;border-radius:2px;cursor:pointer;
+    letter-spacing:.04em;font-family:inherit;}
+  .ratiobar button.active,.modebar button.active{background:var(--ink);color:var(--bg);font-weight:600;}
+  .ratiobar.locked,.modebar.locked{opacity:.4;}
+
+  .busy{position:absolute;inset:0;z-index:6;display:none;align-items:center;
+    justify-content:center;background:rgba(0,0,0,.6);color:var(--ink);
+    font-size:13px;letter-spacing:.12em;}
+  .busy.show{display:flex;}
+  .brandCorner{display:none;position:absolute;left:14px;bottom:12px;z-index:5;
+    font-size:13px;letter-spacing:.28em;font-weight:600;color:var(--ink);
+    text-shadow:0 1px 4px rgba(0,0,0,.85);}
+
+  /* captured strip */
+  /* camera bottom overlay */
+  .camBottom{position:absolute;left:0;right:0;bottom:0;z-index:4;
+    display:flex;flex-direction:column;
+    padding-bottom:env(safe-area-inset-bottom);
+    background:linear-gradient(to bottom, rgba(11,11,13,0), rgba(11,11,13,.55) 45%, rgba(11,11,13,.82));}
+
+  .strip{display:flex;gap:8px;padding:8px 14px;align-items:center;
+    background:transparent;min-height:54px;overflow-x:auto;}
+  .slot{flex:0 0 auto;width:46px;height:46px;border:1px solid rgba(255,255,255,.35);
+    border-radius:2px;position:relative;background:rgba(0,0,0,.35);overflow:hidden;cursor:pointer;}
+  .slot.empty{border-style:dashed;opacity:.5;}
+  .slot.need{border-style:solid;border-color:#ff3b30;border-width:2px;opacity:1;}
+  .slot img{width:100%;height:100%;object-fit:cover;}
+  .slot .chip{position:absolute;left:0;bottom:0;width:100%;height:6px;}
+  .strip-label{flex:0 0 auto;font-size:10px;color:var(--ink);margin-left:auto;
+    text-align:right;line-height:1.4;text-shadow:0 1px 3px rgba(0,0,0,.8);}
+
+  /* controls bar */
+  .controls{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
+    padding:8px 10px 16px;background:transparent;}
+  .ctrl-group{display:flex;align-items:center;gap:10px;}
+  .ctrl-group.leftg{justify-self:start;}
+  .ctrl-group.right{justify-self:stretch;justify-content:flex-end;gap:10px;}
+  .ctrl-btn{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.4);color:var(--ink);
+    width:44px;height:44px;border-radius:50%;font-size:11px;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+    flex:0 0 auto;padding:0;}
+  .ctrl-btn:active{background:#1d1d21;}
+  .ctrl-btn:disabled{opacity:.3;}
+  .tgl{font-size:12px;}
+  #strobeBtn{font-size:22px;}
+  .ctrl-btn.on{background:var(--ink);color:var(--bg);border-color:var(--ink);}
+  .ctrl-btn.primary-btn:not(:disabled){background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;}
+  .shutter{width:68px;height:68px;border-radius:50%;border:3px solid rgba(255,255,255,.85);
+    background:transparent;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;padding:0;}
+  .shutter span{width:54px;height:54px;border-radius:50%;background:var(--shutter);
+    transition:transform .08s;}
+  .shutter:active span{transform:scale(.86);}
+  .shutter:disabled{opacity:.3;}
+
+  /* result / edit view */
+  #editView{display:none;flex-direction:column;height:100%;}
+  .layers{background:var(--panel);border-top:1px solid var(--line);
+    max-height:42vh;overflow-y:auto;padding:6px 0 calc(env(safe-area-inset-bottom) + 6px);}
+  .layer{display:flex;align-items:center;gap:10px;padding:9px 16px;
+    border-bottom:1px solid var(--line);}
+  .layer .lchip{width:26px;height:26px;border-radius:2px;flex:0 0 auto;
+    border:1px solid rgba(255,255,255,.15);}
+  .layer .lmeta{flex:1;min-width:0;}
+  .layer .lname{font-size:10px;color:var(--dim);margin-bottom:5px;}
+  .layer select{width:100%;background:var(--field);color:var(--ink);border:1px solid var(--line);
+    padding:6px 8px;font-size:12px;border-radius:2px;}
+  .layer .lop{flex:0 0 84px;}
+  .layer input[type=range]{width:100%;}
+  .layer .reroll{flex:0 0 auto;background:none;border:1px solid var(--line);
+    color:var(--ink);width:34px;height:34px;border-radius:2px;cursor:pointer;font-size:14px;}
+  .adv-toggle{width:100%;background:var(--panel);border:none;border-top:1px solid var(--line);
+    color:var(--dim);font-size:11px;letter-spacing:.16em;padding:11px;cursor:pointer;
+    font-family:inherit;text-align:center;}
+  .adv-panel{display:none;}
+  .adv-panel.open{display:block;}
+
+  .blendrow{display:flex;align-items:center;gap:12px;padding:11px 14px;
+    background:var(--panel);border-top:1px solid var(--line);}
+  .blendrow .blabel{font-size:11px;color:var(--dim);letter-spacing:.12em;flex:0 0 auto;}
+  .blendrow select,.savebar select,.blendrow input{flex:1;background:var(--field);color:var(--ink);border:1px solid var(--line);
+    padding:9px 10px;font-size:13px;border-radius:2px;font-family:inherit;}
+  .blendrow input{min-width:0;}
+  .savebar{display:flex;align-items:center;gap:12px;padding:11px 16px;
+    background:var(--panel);border-top:1px solid var(--line);}
+  .savebar .blabel{font-size:11px;color:var(--dim);letter-spacing:.12em;flex:0 0 auto;}
+  .bgtoggle{flex:1;display:flex;gap:2px;background:var(--field);border:1px solid var(--line);
+    border-radius:2px;padding:2px;}
+  .bgtoggle button{flex:1;background:none;border:none;color:var(--dim);
+    font-size:13px;padding:8px;border-radius:2px;cursor:pointer;font-family:inherit;}
+  .bgtoggle button.active{background:var(--ink);color:var(--bg);}
+
+  .editbar{display:flex;gap:10px;padding:14px 16px calc(env(safe-area-inset-bottom) + 14px);
+    background:var(--panel);border-top:1px solid var(--line);}
+  .editbar button{flex:1;padding:14px;font-size:12px;letter-spacing:.14em;
+    border-radius:2px;cursor:pointer;border:1px solid var(--line);
+    background:var(--field);color:var(--ink);font-weight:600;}
+  .editbar .primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .editbar .ghost{flex:0 0 96px;}
+
+  .toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 90px);
+    transform:translateX(-50%);background:#000;border:1px solid var(--line);
+    color:var(--ink);font-size:12px;padding:10px 16px;border-radius:2px;
+    opacity:0;transition:opacity .25s;pointer-events:none;z-index:9;}
+  .toast.show{opacity:1;}
+
+  .preview{position:fixed;inset:0;z-index:20;display:none;
+    align-items:center;justify-content:center;background:rgba(0,0,0,.9);
+    padding:24px;}
+  .preview.show{display:flex;}
+  .flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;
+    z-index:30;transition:opacity .05s;}
+  .flash.show{opacity:.95;}
+  .preview img{max-width:100%;max-height:100%;object-fit:contain;border:1px solid var(--line);}
+  .hint{position:absolute;top:58px;left:50%;transform:translateX(-50%);
+    font-size:10px;color:var(--dim);background:rgba(0,0,0,.4);
+    padding:5px 12px;border-radius:2px;}
+  /* 横向き：左にサムネイル、右にコントロール（シャッター中央固定） */
+  @media (orientation: landscape){
+    .topbar{display:none;}
+    .brand-inline{display:none;}
+    .brandCorner{display:block;}
+    .camBottom{inset:0; left:0; top:0; right:0; bottom:0; width:auto;
+      background:none; pointer-events:none; flex-direction:row;}
+
+    .strip{position:absolute; left:0; top:0; bottom:0; width:64px;
+      flex-direction:column; justify-content:center; gap:8px;
+      min-height:0; overflow-y:auto; overflow-x:hidden; pointer-events:auto;
+      padding:48px 6px 56px;
+      background:linear-gradient(to right, rgba(11,11,13,.8), rgba(11,11,13,0));}
+    .strip-label{order:-1; margin:0 0 4px; text-align:center;}
+
+    .controls{position:absolute; right:0; top:0; bottom:0; width:96px;
+      display:block; padding:0; pointer-events:auto;
+      background:linear-gradient(to left, rgba(11,11,13,.8), rgba(11,11,13,0));}
+    .ctrl-group.leftg, .ctrl-group.right{display:contents;}
+    #composeBtn{position:absolute; top:16px; left:50%; transform:translateX(-50%); justify-self:auto;}
+    #shutterBtn{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);}
+    #txtbtn{position:absolute; left:50%; bottom:104px; transform:translateX(-50%);}
+    #strobeBtn{position:absolute; left:50%; bottom:60px; transform:translateX(-50%);}
+    #undoBtn{position:absolute; left:50%; bottom:16px; transform:translateX(-50%);}
+
+    .topctrls{left:74px; right:auto; justify-content:flex-start;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- CAMERA -->
+  <div id="camView" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+    <div class="stage">
+      <video id="video" playsinline autoplay muted></video>
+      <div class="frame" id="frame"></div>
+      <div class="topctrls" id="topctrls">
+        <span class="brand-inline mono">Abstra</span>
+        <div class="modebar mono" id="modebar">
+          <button data-mode="still" class="active">スチール</button>
+          <button data-mode="glitch">グリッチ</button>
+        </div>
+        <div class="ratiobar mono" id="ratiobar">
+          <button data-r="1:1" class="active">1:1</button>
+          <button data-r="3:2">3:2</button>
+          <button data-r="16:9">16:9</button>
+        </div>
+      </div>
+      <div class="busy mono" id="busy">文字を除去中…</div>
+      <div class="brandCorner mono" id="brandCorner">Abstra</div>
+      <div class="camBottom">
+        <div class="strip" id="strip"></div>
+        <div class="controls">
+          <div class="ctrl-group leftg">
+            <button class="ctrl-btn primary-btn mono" id="composeBtn" disabled>合成</button>
+            <button class="ctrl-btn mono" id="undoBtn">取消</button>
+          </div>
+          <button class="shutter" id="shutterBtn"><span></span></button>
+          <div class="ctrl-group right">
+            <button class="ctrl-btn tgl on mono" id="txtbtn">文字</button>
+            <button class="ctrl-btn tgl mono" id="strobeBtn">⚡</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EDIT / RESULT -->
+  <div id="editView">
+    <div class="stage" id="editStage" style="flex:1;">
+      <canvas id="result"></canvas>
+    </div>
+    <button class="adv-toggle mono" id="advToggle">調整 ▸</button>
+    <div class="adv-panel" id="advPanel">
+      <div class="blendrow">
+        <span class="blabel mono">重ね方</span>
+        <select id="blendSel" class="mono"></select>
+      </div>
+      <div class="blendrow stillonly">
+        <span class="blabel mono">エフェクト</span>
+        <select id="effectSel" class="mono">
+          <option value="normal">ノーマル</option>
+          <option value="noise">ノイズ</option>
+          <option value="8bit">8bit</option>
+          <option value="16bit">16bit</option>
+        </select>
+      </div>
+      <div class="blendrow glitchonly">
+        <span class="blabel mono">グリッチ柄</span>
+        <div class="bgtoggle mono" id="patToggle">
+          <button data-pat="0" class="active">スライス</button>
+          <button data-pat="1">ブロック</button>
+          <button data-pat="2">ウェーブ</button>
+        </div>
+      </div>
+      <div class="blendrow glitchonly">
+        <span class="blabel mono">点滅速度</span>
+        <div class="bgtoggle mono" id="speedToggle">
+          <button data-ms="150">遅</button>
+          <button data-ms="95" class="active">中</button>
+          <button data-ms="50">速</button>
+        </div>
+      </div>
+      <div class="blendrow">
+        <span class="blabel mono">周囲</span>
+        <div class="bgtoggle mono" id="matToggle">
+          <button data-mat="none" class="active">なし</button>
+          <button data-mat="#000">黒</button>
+          <button data-mat="#fff">白</button>
+        </div>
+      </div>
+      <div class="blendrow">
+        <span class="blabel mono">作者</span>
+        <input id="authorInput" class="mono" type="text" placeholder="名前（任意）">
+      </div>
+    </div>
+    <div class="savebar">
+      <span class="blabel mono">保存サイズ 長辺</span>
+      <select id="sizeSel" class="mono">
+        <option value="1920">1920 px</option>
+        <option value="2560">2560 px</option>
+        <option value="3840">3840 px</option>
+        <option value="5120">5120 px</option>
+      </select>
+    </div>
+    <div class="editbar">
+      <button class="ghost mono" id="backBtn">← 撮り直す</button>
+      <button class="mono" id="rerollAllBtn">別パターン</button>
+      <button class="primary mono" id="saveBtn">保存</button>
+    </div>
+  </div>
+
+</div>
+<div class="toast mono" id="toast"></div>
+<div class="flash" id="flash"></div>
+<div class="preview" id="preview"><img id="previewImg" alt=""></div>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
+<script>
+const MAX=5, MIN=2;
+const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
+let facing='environment', stream=null;
+let ratio={key:'1:1',w:1,h:1}; // w:h は縦長基準（短辺:長辺）
+let zoom=1; const ZMIN=1, ZMAX=5;
+let mode='still';            // 撮影前モード: still / glitch
+let glitchTimer=null, glitchFrame=0, glitchBase=null;
+let glitchPat=0;             // 0:スライス 1:ブロック 2:ウェーブ
+let glitchSpeed=95;          // 点滅速度(ms/フレーム)
+const GFRAMES=10;
+const GIF_WORKER='https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js';
+let textRemoval=true, busy=false;
+let strobe=false, torchTrack=null, torchOK=false;
+let ocrWorker=null, ocrReady=false;
+
+const BLENDS=[
+  ['lighten','比較(明)'],['darken','比較(暗)'],
+  ['overlay','オーバーレイ'],['hard-light','ハードライト'],
+  ['difference','差の絶対値'],
+  ['hue','色相'],['saturation','彩度'],['color','カラー'],['luminosity','輝度']
+];
+
+const $=id=>document.getElementById(id);
+const video=$('video');
+
+async function startCam(){
+  if(stream) stream.getTracks().forEach(t=>t.stop());
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:facing,width:{ideal:1920},height:{ideal:1920}},audio:false});
+    video.srcObject=stream;
+    torchTrack=stream.getVideoTracks()[0];
+    const caps=torchTrack.getCapabilities ? torchTrack.getCapabilities() : {};
+    torchOK=!!caps.torch;
+    if(strobe && torchOK){ try{ await torchTrack.applyConstraints({advanced:[{torch:true}]}); }catch(e){} }
+  }catch(e){ toast('カメラを起動できません: '+e.message); }
+}
+
+function toast(msg){
+  const t=$('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),1800);
+}
+
+// --- color sampling: 写真内の1ピクセルを完全ランダムに抽出 ---
+function sampleColor(canvas){
+  const w=canvas.width,h=canvas.height;
+  const d=canvas.getContext('2d').getImageData(0,0,w,h).data;
+  const x=(Math.random()*w)|0, y=(Math.random()*h)|0;
+  const p=(y*w+x)*4;
+  return {r:d[p],g:d[p+1],b:d[p+2]};
+}
+
+// --- 2色をランダム抽出 ---
+function pickColors(src){ return [sampleColor(src), sampleColor(src)]; }
+const randLevels=()=>3+(Math.random()*4|0); // 3〜6段
+
+// --- 大ぼかし → ランダム角度モーションブレ → ポスタライズ → 2色マッピング ---
+function treat(src, cA, cB, levels){
+  const w=src.width, h=src.height;
+  const n=Math.max(2,levels|0);
+  const baseBlur=Math.max(10, Math.min(w,h)*0.055);
+  const angle=Math.random()*Math.PI*2;            // 毎回ランダムな角度
+  const len=Math.max(24, Math.min(w,h)*0.15);     // ブレの長さ
+  const steps=14;
+
+  // 1) ガウスぼかし
+  const blr=document.createElement('canvas'); blr.width=w; blr.height=h;
+  const bctx=blr.getContext('2d');
+  bctx.filter='blur('+baseBlur+'px)';
+  bctx.drawImage(src,0,0,w,h);
+  bctx.filter='none';
+
+  // 2) 方向性モーションブレ（角度ランダム）
+  const mo=document.createElement('canvas'); mo.width=w; mo.height=h;
+  const mctx=mo.getContext('2d');
+  const ca=Math.cos(angle), sa=Math.sin(angle);
+  for(let i=0;i<steps;i++){
+    const t=(i/(steps-1)-0.5)*len;
+    mctx.globalAlpha=1/(i+1);                      // 逐次平均で滑らかなスメア
+    mctx.drawImage(blr, ca*t, sa*t);
+  }
+  mctx.globalAlpha=1;
+
+  // 3) ポスタライズ → 2色マッピング
+  const img=mctx.getImageData(0,0,w,h);
+  const d=img.data;
+  for(let i=0;i<d.length;i+=4){
+    let lum=(0.299*d[i]+0.587*d[i+1]+0.114*d[i+2])/255;
+    lum=Math.pow(lum,0.9);
+    lum=Math.round(lum*(n-1))/(n-1);
+    d[i]  =cA.r+(cB.r-cA.r)*lum;
+    d[i+1]=cA.g+(cB.g-cA.g)*lum;
+    d[i+2]=cA.b+(cB.b-cA.b)*lum;
+    d[i+3]=255;
+  }
+  mctx.putImageData(img,0,0);
+  return mo;
+}
+function grad(p){ return `linear-gradient(135deg, ${rgb(p.cA)}, ${rgb(p.cB)})`; }
+
+function frameRect(){
+  const stage=document.querySelector('#camView .stage');
+  const SW=stage.clientWidth, SH=stage.clientHeight;
+  // 縦持ちは短:長、横持ちは長:短に反転
+  let aw=ratio.w, ah=ratio.h;
+  if(SW>SH){ aw=ratio.h; ah=ratio.w; }
+  const ar=aw/ah;
+  let fw=SW, fh=fw/ar;
+  if(fh>SH){ fh=SH; fw=fh*ar; }
+  return {SW,SH,fx:(SW-fw)/2,fy:(SH-fh)/2,fw,fh};
+}
+function layoutFrame(){
+  const f=frameRect(), el=$('frame');
+  el.style.left=f.fx+'px'; el.style.top=f.fy+'px';
+  el.style.width=f.fw+'px'; el.style.height=f.fh+'px';
+}
+
+async function capture(){
+  if(busy) return;
+  if(photos.length>=MAX){ toast('最大'+MAX+'枚です'); return; }
+  const vw=video.videoWidth, vh=video.videoHeight;
+  if(!vw){ toast('カメラ準備中'); return; }
+
+
+  // ストロボ：トーチ非対応端末では画面フラッシュで照らす
+  if(strobe && !torchOK){
+    $('flash').classList.add('show');
+    await new Promise(r=>setTimeout(r,110));
+  }
+
+  const f=frameRect();
+  // object-fit:cover + デジタルズーム の表示→ソース画素へ逆算
+  const scale=Math.max(f.SW/vw, f.SH/vh)*zoom;
+  const offX=(f.SW-vw*scale)/2, offY=(f.SH-vh*scale)/2;
+  let sx=(f.fx-offX)/scale, sy=(f.fy-offY)/scale;
+  let sW=f.fw/scale, sH=f.fh/scale;
+  sx=Math.max(0,Math.min(sx,vw)); sy=Math.max(0,Math.min(sy,vh));
+  sW=Math.min(sW,vw-sx); sH=Math.min(sH,vh-sy);
+  const outW=Math.round(sW), outH=Math.round(sH);
+  const c=document.createElement('canvas'); c.width=outW; c.height=outH;
+  const ctx=c.getContext('2d');
+  if(facing==='user'){ ctx.translate(outW,0); ctx.scale(-1,1); }
+  ctx.drawImage(video, sx,sy,sW,sH, 0,0,outW,outH);
+  if(strobe && !torchOK){ setTimeout(()=>$('flash').classList.remove('show'),60); }
+
+  if(textRemoval){
+    busy=true; $('busy').classList.add('show');
+    try{ await removeText(c); }catch(e){ /* OCR失敗時はそのまま続行 */ }
+    $('busy').classList.remove('show'); busy=false;
+  }
+
+  const [cA,cB]=pickColors(c);
+  const levels=randLevels();
+  photos.push({src:c,cA,cB,levels,tinted:treat(c,cA,cB,levels)});
+  renderStrip();
+}
+
+// --- OCR：文字を認識し、周囲色で塗りつぶして除去 ---
+async function initOCR(){
+  if(ocrReady||typeof Tesseract==='undefined') return;
+  try{ ocrWorker=await Tesseract.createWorker(['eng','jpn']); ocrReady=true; }
+  catch(e){ ocrReady=false; }
+}
+function areaAverage(ctx,x,y,w,h,W,H){
+  x=Math.max(0,x|0); y=Math.max(0,y|0);
+  w=Math.min(W-x,w|0); h=Math.min(H-y,h|0);
+  if(w<=0||h<=0) return {r:0,g:0,b:0};
+  const d=ctx.getImageData(x,y,w,h).data;
+  let r=0,g=0,b=0,n=0;
+  for(let i=0;i<d.length;i+=16){ r+=d[i]; g+=d[i+1]; b+=d[i+2]; n++; }
+  return {r:r/n|0, g:g/n|0, b:b/n|0};
+}
+async function removeText(canvas){
+  if(!ocrReady){ await initOCR(); }
+  if(!ocrReady||!ocrWorker) return;
+  const W=canvas.width, H=canvas.height;
+  // OCRは縮小画像で高速化し、座標を元解像度へ戻す
+  const maxDim=1000, sc=Math.min(1, maxDim/Math.max(W,H));
+  let oc=canvas;
+  if(sc<1){
+    oc=document.createElement('canvas');
+    oc.width=Math.round(W*sc); oc.height=Math.round(H*sc);
+    oc.getContext('2d').drawImage(canvas,0,0,oc.width,oc.height);
+  }
+  const { data }=await ocrWorker.recognize(oc);
+  const words=(data.words||[]).filter(w=>w.confidence>50 && w.text.trim().length>0);
+  if(!words.length) return;
+  const ctx=canvas.getContext('2d');
+  words.forEach(w=>{
+    const b=w.bbox;
+    let x=b.x0/sc, y=b.y0/sc, ww=(b.x1-b.x0)/sc, hh=(b.y1-b.y0)/sc;
+    const pad=Math.max(ww,hh)*0.18;
+    x-=pad; y-=pad; ww+=pad*2; hh+=pad*2;
+    const col=areaAverage(ctx, x-pad, y-pad, ww+pad*2, hh+pad*2, W, H);
+    ctx.fillStyle=`rgb(${col.r},${col.g},${col.b})`;
+    ctx.fillRect(x,y,ww,hh);
+  });
+}
+
+function rgb(c){return `rgb(${c.r|0},${c.g|0},${c.b|0})`;}
+
+function removeLast(){ if(photos.length){ photos.pop(); renderStrip(); } }
+
+function openPreview(i){
+  if(!photos[i]) return;
+  $('previewImg').src=photos[i].tinted.toDataURL('image/jpeg',0.92);
+  $('preview').classList.add('show');
+}
+$('preview').onclick=()=>$('preview').classList.remove('show');
+
+function renderStrip(){
+  const strip=$('strip'); strip.innerHTML='';
+  const need=photos.length<MIN;            // MIN枚未満なら最初のMIN枠を赤く
+  for(let i=0;i<MAX;i++){
+    const s=document.createElement('div');
+    const filled=!!photos[i];
+    s.className='slot'+(filled?'':' empty')+(need && i<MIN?' need':'');
+    if(filled){
+      const im=document.createElement('img'); im.src=photos[i].tinted.toDataURL('image/jpeg',0.6);
+      const chip=document.createElement('div'); chip.className='chip'; chip.style.background=grad(photos[i]);
+      s.appendChild(im); s.appendChild(chip);
+      s.onclick=()=>openPreview(i);
+    }
+    strip.appendChild(s);
+  }
+  const lbl=document.createElement('div'); lbl.className='strip-label mono';
+  lbl.textContent=`${photos.length} / ${MAX}`;
+  strip.appendChild(lbl);
+  $('composeBtn').disabled=photos.length<MIN;
+  $('undoBtn').disabled=photos.length===0;
+  $('ratiobar').classList.toggle('locked',photos.length>0);
+  $('modebar').classList.toggle('locked',photos.length>0);
+}
+
+// --- compose ---
+const composed=document.createElement('canvas');
+let globalBlend='overlay'; // 全レイヤー共通の重ね方
+let effect='normal';         // 表現エフェクト（スチール時）: normal / noise
+let fxScale=1;               // ノイズ/グリッチの強度スケール（別パターンでランダム）
+let glitchSeed=0;            // グリッチのパターン種（別パターンでランダム）
+
+function renderStack(){
+  const base=photos[0].src;
+  composed.width=base.width; composed.height=base.height;
+  const ctx=composed.getContext('2d');
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,composed.width,composed.height);
+  photos.forEach((p,i)=>{
+    ctx.globalCompositeOperation=i===0?'source-over':globalBlend;
+    ctx.drawImage(p.tinted,0,0,composed.width,composed.height);
+  });
+  ctx.globalCompositeOperation='source-over';
+}
+
+function fxHash(x,y){ // 0..1 の決定論的擬似乱数
+  let h=(x*73856093)^(y*19349663); h=Math.imul(h^(h>>>13),1274126177);
+  return ((h>>>0)%1000)/1000;
+}
+
+function shufflePhotos(){
+  for(let i=photos.length-1;i>0;i--){
+    const j=(Math.random()*(i+1))|0;
+    [photos[i],photos[j]]=[photos[j],photos[i]];
+  }
+}
+
+function compose(){
+  renderStack();
+  if(mode==='glitch'){ startGlitch(); }
+  else { stopGlitch(); applyEffect(); }
+  updateSizeLock(); updateEffectLock();
+}
+
+// --- スチール用エフェクト（ノーマル / ノイズ / 8bit / 16bit） ---
+function retro(octx, w, h, targetRes, levels){
+  const sc=targetRes/Math.max(w,h);
+  const sw=Math.max(1,Math.round(w*sc)), sh=Math.max(1,Math.round(h*sc));
+  const tmp=document.createElement('canvas'); tmp.width=sw; tmp.height=sh;
+  const tctx=tmp.getContext('2d'); tctx.imageSmoothingEnabled=false;
+  tctx.drawImage(composed,0,0,sw,sh);
+  octx.imageSmoothingEnabled=false;
+  octx.clearRect(0,0,w,h);
+  octx.drawImage(tmp,0,0,sw,sh,0,0,w,h);
+  octx.imageSmoothingEnabled=true;
+  const img=octx.getImageData(0,0,w,h), dd=img.data, step=255/(levels-1);
+  for(let i=0;i<dd.length;i+=4){
+    dd[i]=Math.round(dd[i]/step)*step;
+    dd[i+1]=Math.round(dd[i+1]/step)*step;
+    dd[i+2]=Math.round(dd[i+2]/step)*step;
+  }
+  octx.putImageData(img,0,0);
+}
+function applyEffect(){
+  const out=$('result'), w=composed.width, h=composed.height;
+  out.width=w; out.height=h;
+  const octx=out.getContext('2d');
+  octx.drawImage(composed,0,0);
+  if(effect==='noise'){
+    const img=octx.getImageData(0,0,w,h), dd=img.data;
+    const gs=Math.max(1, Math.round(fxScale*1.4));
+    const amt=60;
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+      const n=(fxHash((x/gs)|0,(y/gs)|0)-0.5)*amt;
+      const p=(y*w+x)*4; dd[p]+=n; dd[p+1]+=n; dd[p+2]+=n;
+    }
+    octx.putImageData(img,0,0);
+  }
+  else if(effect==='8bit'){ retro(octx,w,h,128,4); }
+  else if(effect==='16bit'){ retro(octx,w,h,256,8); }
+}
+
+// --- グリッチ（撮影画像を使った動画／GIF用） ---
+function makeBase(w,h){
+  const b=document.createElement('canvas'); b.width=w; b.height=h;
+  b.getContext('2d').drawImage(composed,0,0,w,h);
+  return b;
+}
+function rgbShift(octx,w,h){
+  const img=octx.getImageData(0,0,w,h), d=img.data, copy=new Uint8ClampedArray(d);
+  const off=Math.max(2, Math.round(w*0.004*(0.6+fxScale)));
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const p=(y*w+x)*4;
+    const rx=Math.min(w-1,x+off), bx=Math.max(0,x-off);
+    d[p]=copy[(y*w+rx)*4]; d[p+2]=copy[(y*w+bx)*4+2];
+  }
+  octx.putImageData(img,0,0);
+}
+// 0: スライス（横方向のずれ＋色ずれ）
+function glitchSlice(base, octx, w, h, seed){
+  const bands=10+((fxScale*8)|0);
+  for(let i=0;i<bands;i++){
+    const by=Math.floor(fxHash(i+seed,1)*h);
+    const bh=Math.max(2, Math.floor(3+fxHash(i+seed,2)*h*0.06));
+    const dx=Math.round((fxHash(i+seed,3)-0.5)*w*0.3);
+    if(by>=h||dx===0) continue;
+    octx.drawImage(base, 0,by,w,bh, dx,by,w,bh);
+    if(dx>0) octx.drawImage(base, w-dx,by,dx,bh, 0,by,dx,bh);
+    else     octx.drawImage(base, 0,by,-dx,bh, w+dx,by,-dx,bh);
+  }
+  rgbShift(octx,w,h);
+}
+// 1: ブロック（一部ブロックを横にずらす）
+function glitchBlock(base, octx, w, h, seed){
+  const cols=6+((fxScale*3)|0), rows=8+((fxScale*4)|0);
+  const bw=Math.ceil(w/cols), bh=Math.ceil(h/rows);
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+    if(fxHash(c*7+r*13+seed,5)<0.62) continue;
+    const sx=c*bw, sy=r*bh;
+    const dx=Math.round((fxHash(c+seed*2,6)-0.5)*w*0.14);
+    if(dx!==0) octx.drawImage(base, sx,sy,bw,bh, sx+dx,sy,bw,bh);
+  }
+  rgbShift(octx,w,h);
+}
+// 2: ウェーブ（横揺れ＋走査線＋明滅）
+function glitchWave(base, octx, w, h, seed){
+  const amp=w*0.02*(0.6+fxScale), ph=fxHash(seed,8)*6.28, freq=4+fxHash(seed,9)*6;
+  for(let y=0;y<h;y+=2){
+    const dx=Math.round(Math.sin(y/h*freq*6.28+ph)*amp);
+    if(dx!==0) octx.drawImage(base, 0,y,w,2, dx,y,w,2);
+  }
+  octx.globalCompositeOperation='multiply';
+  octx.fillStyle='rgba(0,0,0,0.5)';
+  for(let y=0;y<h;y+=3) octx.fillRect(0,y,w,1);
+  const fl=fxHash(seed,10);
+  if(fl>0.5){ octx.globalCompositeOperation='screen';
+    octx.fillStyle='rgba(255,255,255,'+(0.05+fl*0.12).toFixed(3)+')'; octx.fillRect(0,0,w,h); }
+  octx.globalCompositeOperation='source-over';
+  rgbShift(octx,w,h);
+}
+function drawGlitch(base, octx, w, h, seed){
+  octx.clearRect(0,0,w,h);
+  octx.drawImage(base,0,0);
+  if(glitchPat===1) glitchBlock(base,octx,w,h,seed);
+  else if(glitchPat===2) glitchWave(base,octx,w,h,seed);
+  else glitchSlice(base,octx,w,h,seed);
+}
+function startGlitch(){
+  stopGlitch();
+  const cap=720, cw=composed.width, ch=composed.height, sc=Math.min(1,cap/Math.max(cw,ch));
+  const w=Math.round(cw*sc), h=Math.round(ch*sc);
+  const out=$('result'); out.width=w; out.height=h;
+  const octx=out.getContext('2d');
+  glitchBase=makeBase(w,h); glitchFrame=0;
+  drawGlitch(glitchBase, octx, w, h, glitchSeed*GFRAMES);
+  glitchTimer=setInterval(()=>{
+    glitchFrame=(glitchFrame+1)%GFRAMES;
+    drawGlitch(glitchBase, octx, w, h, glitchSeed*GFRAMES+glitchFrame);
+  }, glitchSpeed);
+}
+function stopGlitch(){ if(glitchTimer){ clearInterval(glitchTimer); glitchTimer=null; } }
+
+function updateSizeLock(){
+  const sel=$('sizeSel'); if(!sel) return;
+  let opt=sel.querySelector('option[value="480"]');
+  if(mode==='glitch'){
+    if(!opt){ opt=document.createElement('option'); opt.value='480'; opt.textContent='480 px（固定）'; sel.insertBefore(opt, sel.firstChild); }
+    sel.value='480'; sel.disabled=true;
+  }else{
+    if(opt) opt.remove();
+    sel.disabled=false;
+    if(!sel.value || sel.value==='480') sel.value='1920';
+  }
+}
+function updateEffectLock(){
+  const es=$('effectSel'); if(es) es.disabled=(mode==='glitch');
+  const g=(mode==='glitch');
+  document.querySelectorAll('.glitchonly').forEach(el=>el.style.display=g?'flex':'none');
+  document.querySelectorAll('.stillonly').forEach(el=>el.style.display=g?'none':'flex');
+}
+
+function fillBlendSelect(){
+  const sel=$('blendSel'); if(sel.options.length) return;
+  BLENDS.forEach(([v,jp])=>{const o=document.createElement('option');o.value=v;o.textContent=jp;if(v===globalBlend)o.selected=true;sel.appendChild(o);});
+}
+
+function showEdit(){
+  $('camView').style.display='none';
+  $('editView').style.display='flex';
+  $('result').style.display='block';
+  $('result').classList.remove('fs');
+  fillBlendSelect();
+  shufflePhotos();
+  compose();
+}
+function showCam(){
+  stopGlitch();
+  $('editView').style.display='none';
+  $('camView').style.display='flex';
+}
+
+// events
+$('shutterBtn').onclick=capture;
+$('undoBtn').onclick=removeLast;
+$('strobeBtn').onclick=async()=>{
+  strobe=!strobe;
+  $('strobeBtn').classList.toggle('on',strobe);
+  if(torchOK && torchTrack){ try{ await torchTrack.applyConstraints({advanced:[{torch:strobe}]}); }catch(e){} }
+};
+$('txtbtn').onclick=()=>{
+  textRemoval=!textRemoval;
+  $('txtbtn').classList.toggle('on',textRemoval);
+  if(textRemoval) initOCR();
+};
+$('composeBtn').onclick=showEdit;
+$('backBtn').onclick=()=>{ photos.length=0; renderStrip(); showCam(); };
+
+function randomizeStyle(){
+  globalBlend=BLENDS[(Math.random()*BLENDS.length)|0][0];
+  const FX=['normal','noise','8bit','16bit'];
+  effect=FX[(Math.random()*FX.length)|0];
+  glitchSeed=(Math.random()*1000)|0;     // グリッチ時のパターン
+  fxScale=0.6+Math.random()*1.6;
+  const bs=$('blendSel'); if(bs && bs.options.length) bs.value=globalBlend;
+  const es=$('effectSel'); if(es && !es.disabled) es.value=effect;
+}
+$('rerollAllBtn').onclick=()=>{
+  photos.forEach(p=>{
+    [p.cA,p.cB]=pickColors(p.src);
+    p.levels=randLevels();
+    p.tinted=treat(p.src,p.cA,p.cB,p.levels);
+  });
+  randomizeStyle();
+  shufflePhotos();
+  compose();
+};
+$('blendSel').onchange=e=>{ globalBlend=e.target.value; compose(); };
+$('effectSel').onchange=e=>{ effect=e.target.value; compose(); };
+let matColor='none';   // 作品の周囲（マット）: none / #000 / #fff
+function applyMat(){
+  const r=$('result'), st=$('editStage');
+  if(matColor==='none'){ r.classList.remove('mat'); r.style.background=''; st.style.background=''; }
+  else{ r.classList.add('mat'); r.style.background=matColor; st.style.background=matColor; }
+}
+$('matToggle').onclick=e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  matColor=b.dataset.mat;
+  [...$('matToggle').children].forEach(x=>x.classList.toggle('active',x===b));
+  applyMat();
+};
+$('result').addEventListener('click',()=>{
+  const r=$('result');
+  const fs=r.classList.toggle('fs');
+  if(fs){ r.style.background=(matColor!=='none'?matColor:'#000'); }
+  else{ applyMat(); }
+});
+$('patToggle').onclick=e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  glitchPat=+b.dataset.pat;
+  [...$('patToggle').children].forEach(x=>x.classList.toggle('active',x===b));
+  compose();
+};
+$('speedToggle').onclick=e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  glitchSpeed=+b.dataset.ms;
+  [...$('speedToggle').children].forEach(x=>x.classList.toggle('active',x===b));
+  if(mode==='glitch') startGlitch();
+};
+
+$('advToggle').onclick=()=>{
+  const open=$('advPanel').classList.toggle('open');
+  $('advToggle').textContent=open?'調整 ▾':'調整 ▸';
+};
+
+function dataURLtoBlob(durl){
+  const [head,b64]=durl.split(',');
+  const mime=(head.match(/:(.*?);/)||[])[1]||'application/octet-stream';
+  const bin=atob(b64), arr=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+  return new Blob([arr],{type:mime});
+}
+function dataURLtoBytes(durl){
+  const bin=atob(durl.split(',')[1]); const arr=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+  return arr;
+}
+// --- PNGメタデータ（作者・撮影日時など）の埋め込み ---
+function crc32(bytes){
+  let crc=0xFFFFFFFF;
+  for(let i=0;i<bytes.length;i++){
+    let c=(crc^bytes[i])&0xFF;
+    for(let k=0;k<8;k++) c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);
+    crc=(crc>>>8)^c;
+  }
+  return (crc^0xFFFFFFFF)>>>0;
+}
+function pngChunk(type, data){
+  const out=new Uint8Array(12+data.length);
+  const dv=new DataView(out.buffer);
+  dv.setUint32(0,data.length);
+  for(let i=0;i<4;i++) out[4+i]=type.charCodeAt(i);
+  out.set(data,8);
+  dv.setUint32(8+data.length, crc32(out.subarray(4,8+data.length)));
+  return out;
+}
+function pngText(keyword, text){ // ASCII向け tEXt
+  const a=[]; for(const ch of keyword) a.push(ch.charCodeAt(0)&0xFF); a.push(0);
+  for(const ch of text) a.push(ch.charCodeAt(0)&0xFF);
+  return pngChunk('tEXt', new Uint8Array(a));
+}
+function pngItext(keyword, text){ // UTF-8向け iTXt（日本語可）
+  const enc=new TextEncoder(), a=[];
+  for(const ch of keyword) a.push(ch.charCodeAt(0)&0xFF);
+  a.push(0,0,0,0,0); // null, 圧縮フラグ, 圧縮法, 言語null, 翻訳キーワードnull
+  enc.encode(text).forEach(b=>a.push(b));
+  return pngChunk('iTXt', new Uint8Array(a));
+}
+function addPngMeta(bytes, chunks){
+  const dv=new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const insertAt=8+12+dv.getUint32(8); // IHDRの直後
+  let extra=0; chunks.forEach(c=>extra+=c.length);
+  const out=new Uint8Array(bytes.length+extra);
+  out.set(bytes.subarray(0,insertAt),0);
+  let off=insertAt;
+  chunks.forEach(c=>{ out.set(c,off); off+=c.length; });
+  out.set(bytes.subarray(insertAt), off);
+  return out;
+}
+function nowStamp(){
+  const w=new Date(), p=n=>('0'+n).slice(-2);
+  return w.getFullYear()+'-'+p(w.getMonth()+1)+'-'+p(w.getDate())+' '+p(w.getHours())+':'+p(w.getMinutes())+':'+p(w.getSeconds());
+}
+function fileStamp(){
+  const w=new Date(), p=n=>('0'+n).slice(-2);
+  // 端末のローカル時刻・アメリカ式の順番（月-日-年）。全機種で安全な英数字とハイフン/アンダースコアのみ
+  return 'Abstra_'+p(w.getMonth()+1)+'-'+p(w.getDate())+'-'+w.getFullYear()+'_'+p(w.getHours())+'-'+p(w.getMinutes())+'-'+p(w.getSeconds());
+}
+function authorName(){ return (($('authorInput')&&$('authorInput').value)||'').trim(); }
+function buildPngMeta(){
+  const chunks=[ pngText('Software','Abstra By A-Mashiro'), pngText('Creation Time', nowStamp()) ];
+  const author=authorName();
+  if(author) chunks.push(pngItext('Author', author));
+  return chunks;
+}
+// --- GIFのコメント拡張（作者・作成日時） ---
+function metaText(){
+  let t='Abstra By A-Mashiro / Created: '+nowStamp();
+  const a=authorName(); if(a) t+=' / Author: '+a;
+  return t;
+}
+function addGifComment(bytes, text){
+  const packed=bytes[10];
+  const gctSize=(packed&0x80)?3*(1<<((packed&0x07)+1)):0;
+  const insertAt=6+7+gctSize;             // ヘッダ+論理画面記述子+GCT の直後
+  const enc=new TextEncoder().encode(text);
+  const ext=[0x21,0xFE];                   // Comment Extension
+  for(let i=0;i<enc.length;i+=255){
+    const slice=enc.subarray(i,i+255);
+    ext.push(slice.length); slice.forEach(b=>ext.push(b));
+  }
+  ext.push(0x00);
+  const e=new Uint8Array(ext);
+  const out=new Uint8Array(bytes.length+e.length);
+  out.set(bytes.subarray(0,insertAt),0);
+  out.set(e,insertAt);
+  out.set(bytes.subarray(insertAt), insertAt+e.length);
+  return out;
+}
+// iOSは共有シート→「写真に保存」で保存。非対応環境はダウンロードに切替
+async function saveOrShare(blob, filename, fallbackMsg){
+  try{
+    const file=new File([blob], filename, {type:blob.type});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({files:[file]});
+      return;
+    }
+  }catch(err){ if(err && err.name==='AbortError') return; }
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=filename; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+  toast(fallbackMsg);
+}
+
+$('saveBtn').onclick=()=>{
+  if(mode==='glitch'){ saveGif(); return; }
+  const longEdge=parseInt($('sizeSel').value,10)||1920;
+  const rc=$('result'), w=rc.width, h=rc.height;
+  const scale=longEdge/Math.max(w,h);
+  const ex=document.createElement('canvas');
+  ex.width=Math.round(w*scale); ex.height=Math.round(h*scale);
+  const ectx=ex.getContext('2d');
+  ectx.imageSmoothingQuality='high';
+  ectx.drawImage(rc,0,0,ex.width,ex.height);
+  let out=ex;
+  if(matColor!=='none'){
+    const bd=Math.round(longEdge*0.06);
+    const m=document.createElement('canvas');
+    m.width=ex.width+bd*2; m.height=ex.height+bd*2;
+    const mc=m.getContext('2d');
+    mc.fillStyle=matColor; mc.fillRect(0,0,m.width,m.height);
+    mc.drawImage(ex,bd,bd);
+    out=m;
+  }
+  let bytes=dataURLtoBytes(out.toDataURL('image/png'));
+  bytes=addPngMeta(bytes, buildPngMeta());
+  const blob=new Blob([bytes],{type:'image/png'});
+  saveOrShare(blob, fileStamp()+'.png', '保存しました（長辺 '+longEdge+'px）');
+};
+
+function saveGif(){
+  if(typeof GIF==='undefined'){ toast('GIFライブラリ未読込（オンライン環境で再試行）'); return; }
+  const longEdge=480;
+  const cw=composed.width, ch=composed.height, sc=longEdge/Math.max(cw,ch);
+  const w=Math.round(cw*sc), h=Math.round(ch*sc);
+  const base=makeBase(w,h);
+  const g=document.createElement('canvas'); g.width=w; g.height=h;
+  const gctx=g.getContext('2d');
+  const bd=(matColor!=='none')?Math.round(longEdge*0.06):0;
+  const fw=w+bd*2, fh=h+bd*2;
+  const tmp=document.createElement('canvas'); tmp.width=fw; tmp.height=fh;
+  const tctx=tmp.getContext('2d');
+  const gif=new GIF({workers:2, quality:10, width:fw, height:fh, workerScript:GIF_WORKER});
+  for(let f=0; f<GFRAMES; f++){
+    drawGlitch(base, gctx, w, h, glitchSeed*GFRAMES+f);
+    if(matColor!=='none'){ tctx.fillStyle=matColor; tctx.fillRect(0,0,fw,fh); }
+    tctx.drawImage(g, bd, bd);
+    gif.addFrame(tctx, {copy:true, delay:glitchSpeed});
+  }
+  gif.on('finished', async blob=>{
+    try{
+      const buf=new Uint8Array(await blob.arrayBuffer());
+      blob=new Blob([addGifComment(buf, metaText())], {type:'image/gif'});
+    }catch(e){}
+    saveOrShare(blob, fileStamp()+'.gif', 'GIFを保存しました');
+  });
+  toast('GIF生成中…'); gif.render();
+}
+
+document.querySelectorAll('#ratiobar button').forEach(b=>{
+  b.onclick=()=>{
+    if(photos.length){ toast('撮影中は比率を変更できません'); return; }
+    const parts=b.dataset.r.split(':').map(Number);
+    ratio={key:b.dataset.r,w:Math.min(...parts),h:Math.max(...parts)};
+    document.querySelectorAll('#ratiobar button').forEach(x=>x.classList.toggle('active',x===b));
+    layoutFrame();
+  };
+});
+
+document.querySelectorAll('#modebar button').forEach(b=>{
+  b.onclick=()=>{
+    if(photos.length){ toast('撮影中はモードを変更できません'); return; }
+    mode=b.dataset.mode;
+    document.querySelectorAll('#modebar button').forEach(x=>x.classList.toggle('active',x===b));
+  };
+});
+
+video.addEventListener('loadedmetadata',layoutFrame);
+window.addEventListener('resize',layoutFrame);
+window.addEventListener('orientationchange',()=>setTimeout(layoutFrame,300));
+
+// --- zoom（画面を押しながら上下ドラッグ／ピンチ） ---
+function setZoom(z){
+  zoom=Math.max(ZMIN,Math.min(ZMAX,z));
+  video.style.transform=`scale(${zoom})`;
+}
+
+let pinchStart=null, dragZoom=null;
+const stage=document.querySelector('#camView .stage');
+function dist(t){ const dx=t[0].clientX-t[1].clientX, dy=t[0].clientY-t[1].clientY; return Math.hypot(dx,dy); }
+function zoomable(t){ return t && !t.closest('button,select,input'); }
+
+stage.addEventListener('touchstart',e=>{
+  if(e.touches.length===2){ pinchStart={d:dist(e.touches),z:zoom}; dragZoom=null; }
+  else if(e.touches.length===1 && zoomable(e.target)){
+    dragZoom={y:e.touches[0].clientY, z:zoom};
+  }
+},{passive:false});
+stage.addEventListener('touchmove',e=>{
+  if(e.touches.length===2 && pinchStart){
+    e.preventDefault();
+    setZoom(pinchStart.z * dist(e.touches)/pinchStart.d);
+  }else if(e.touches.length===1 && dragZoom){
+    e.preventDefault();
+    const dy=dragZoom.y - e.touches[0].clientY;      // 上=ズームイン
+    setZoom(dragZoom.z + dy/stage.clientHeight*(ZMAX-ZMIN)*1.4);
+  }
+},{passive:false});
+stage.addEventListener('touchend',e=>{
+  if(e.touches.length<2) pinchStart=null;
+  if(e.touches.length===0) dragZoom=null;
+});
+
+(function(){
+  const ai=$('authorInput'); if(!ai) return;
+  try{ ai.value=localStorage.getItem('abstra_author')||''; }catch(e){}
+  ai.addEventListener('input',()=>{ try{ localStorage.setItem('abstra_author', ai.value); }catch(e){} });
+})();
+
+renderStrip();
+layoutFrame();
+setZoom(1);
+initOCR();
+startCam();
+</script>
+</body>
+</html>
