@@ -287,6 +287,16 @@
         </div>
       </div>
       <div class="blendrow">
+        <span class="blabel mono">Tone</span>
+        <div class="bgtoggle mono" id="toneToggle">
+          <button data-tone="0" class="active">Off</button>
+          <button data-tone="1">1</button>
+          <button data-tone="2">2</button>
+          <button data-tone="3">3</button>
+          <button data-tone="4">4</button>
+        </div>
+      </div>
+      <div class="blendrow">
         <span class="blabel mono">Border</span>
         <div class="bgtoggle mono" id="matToggle">
           <button data-mat="none" class="active">None</button>
@@ -609,6 +619,7 @@ const composed=document.createElement('canvas');
 let globalBlend='overlay'; // フォールバック用
 let punchC=1.16, punchS=1.3; // 仕上げのコントラスト/彩度（Mergeでランダム）
 let satLevel=2; const SAT_LEVELS=[1.0,3.25,5.5,7.75,10.0]; // 彩度5段階(1〜10)
+let toneIdx=0; const TONE_LEVELS=[0,0.08,0.16,0.24,0.32]; let toneLift=0; // 中間調リフト(Off+4段)
 function randBlend(){ return BLENDS[(Math.random()*BLENDS.length)|0][0]; }
 let effect='normal';         // 表現エフェクト（スチール時）: normal / noise
 let fxScale=1;               // ノイズ/グリッチの強度スケール（別パターンでランダム）
@@ -648,12 +659,15 @@ function renderStack(){
 function punchUp(ctx, W, H){
   const img=ctx.getImageData(0,0,W,H), d=img.data;
   const C=punchC, S=punchS;
+  // トーンカーブ：両端固定で中央を持ち上げる（toneLift=0で無効）
+  const lut=new Uint8ClampedArray(256);
+  for(let i=0;i<256;i++){ lut[i]=i + (toneLift*255)*Math.sin(Math.PI*i/255); }
   for(let i=0;i<d.length;i+=4){
     let r=(d[i]-128)*C+128, g=(d[i+1]-128)*C+128, b=(d[i+2]-128)*C+128;
     const lum=0.299*r+0.587*g+0.114*b;
-    d[i]  =lum+(r-lum)*S;
-    d[i+1]=lum+(g-lum)*S;
-    d[i+2]=lum+(b-lum)*S;
+    r=lum+(r-lum)*S; g=lum+(g-lum)*S; b=lum+(b-lum)*S;
+    const ri=r<0?0:r>255?255:r|0, gi=g<0?0:g>255?255:g|0, bi=b<0?0:b>255?255:b|0;
+    d[i]=lut[ri]; d[i+1]=lut[gi]; d[i+2]=lut[bi];
   }
   ctx.putImageData(img,0,0);
 }
@@ -662,7 +676,10 @@ function assignMergeJitter(){
   punchC=1.12+Math.random()*0.28;  // コントラスト 1.12〜1.40（グレー感をトーンで解消）
   satLevel=(Math.random()*SAT_LEVELS.length)|0;     // 彩度段階をランダム
   punchS=SAT_LEVELS[satLevel];
+  toneIdx=(Math.random()*TONE_LEVELS.length)|0;     // トーンリフトをランダム
+  toneLift=TONE_LEVELS[toneIdx];
   setSatToggleUI();
+  setToneToggleUI();
   photos.forEach((p,i)=>{
     if(i===0){ p.jmag=0;p.jang=0;p.jblur=0;p.jrot=0;p.jflip=false;p.jscale=1; return; }
     p.jang=0; p.jmag=0;                 // ズレなし
@@ -989,6 +1006,17 @@ $('satToggle').onclick=e=>{
   satLevel=+b.dataset.sat;
   punchS=SAT_LEVELS[satLevel];
   setSatToggleUI();
+  compose();
+};
+function setToneToggleUI(){
+  const t=$('toneToggle'); if(!t) return;
+  [...t.children].forEach(x=>x.classList.toggle('active', +x.dataset.tone===toneIdx));
+}
+$('toneToggle').onclick=e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  toneIdx=+b.dataset.tone;
+  toneLift=TONE_LEVELS[toneIdx];
+  setToneToggleUI();
   compose();
 };
 $('result').addEventListener('click',()=>{
