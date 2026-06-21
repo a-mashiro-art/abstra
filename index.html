@@ -706,6 +706,7 @@ function compose(){
   renderStack();
   if(mode==='glitch'){ startGlitch(); }
   else { stopGlitch(); applyEffect(); }
+  if(!$('result').classList.contains('fs')) applyMat(); // 再合成後もボーダー維持
   updateSizeLock(); updateEffectLock();
 }
 
