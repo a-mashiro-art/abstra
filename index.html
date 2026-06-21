@@ -490,7 +490,7 @@ async function capture(){
 
   const colors=pickColors(c);
   const levels=randLevels();
-  photos.push({src:c,colors,levels,tinted:treat(c,colors,levels)});
+  photos.push({src:c,colors,levels,blend:randBlend(),tinted:treat(c,colors,levels)});
   renderStrip();
 }
 
@@ -580,7 +580,8 @@ function renderStrip(){
 
 // --- compose ---
 const composed=document.createElement('canvas');
-let globalBlend='overlay'; // 全レイヤー共通の重ね方
+let globalBlend='overlay'; // フォールバック用
+function randBlend(){ return BLENDS[(Math.random()*BLENDS.length)|0][0]; }
 let effect='normal';         // 表現エフェクト（スチール時）: normal / noise
 let fxScale=1;               // ノイズ/グリッチの強度スケール（別パターンでランダム）
 let glitchSeed=0;            // グリッチのパターン種（別パターンでランダム）
@@ -592,7 +593,7 @@ function renderStack(){
   ctx.globalCompositeOperation='source-over';
   ctx.fillStyle='#000'; ctx.fillRect(0,0,composed.width,composed.height);
   photos.forEach((p,i)=>{
-    ctx.globalCompositeOperation=i===0?'source-over':globalBlend;
+    ctx.globalCompositeOperation=i===0?'source-over':(p.blend||globalBlend);
     ctx.drawImage(p.tinted,0,0,composed.width,composed.height);
   });
   ctx.globalCompositeOperation='source-over';
@@ -756,7 +757,8 @@ function updateEffectLock(){
 
 function fillBlendSelect(){
   const sel=$('blendSel'); if(sel.options.length) return;
-  BLENDS.forEach(([v,jp])=>{const o=document.createElement('option');o.value=v;o.textContent=jp;if(v===globalBlend)o.selected=true;sel.appendChild(o);});
+  const r=document.createElement('option'); r.value='__random'; r.textContent='Random'; r.selected=true; sel.appendChild(r);
+  BLENDS.forEach(([v,jp])=>{const o=document.createElement('option');o.value=v;o.textContent=jp;sel.appendChild(o);});
 }
 
 function showEdit(){
@@ -790,25 +792,30 @@ $('composeBtn').onclick=showEdit;
 $('backBtn').onclick=()=>{ photos.length=0; renderStrip(); showCam(); };
 
 function randomizeStyle(){
-  globalBlend=BLENDS[(Math.random()*BLENDS.length)|0][0];
   const FX=['normal','noise','8bit','16bit'];
   effect=FX[(Math.random()*FX.length)|0];
   glitchSeed=(Math.random()*1000)|0;     // グリッチ時のパターン
   fxScale=0.6+Math.random()*1.6;
-  const bs=$('blendSel'); if(bs && bs.options.length) bs.value=globalBlend;
+  const bs=$('blendSel'); if(bs && bs.options.length) bs.value='__random';
   const es=$('effectSel'); if(es && !es.disabled) es.value=effect;
 }
 $('rerollAllBtn').onclick=()=>{
   photos.forEach(p=>{
     p.colors=pickColors(p.src);
     p.levels=randLevels();
+    p.blend=randBlend();
     p.tinted=treat(p.src,p.colors,p.levels);
   });
   randomizeStyle();
   shufflePhotos();
   compose();
 };
-$('blendSel').onchange=e=>{ globalBlend=e.target.value; compose(); };
+$('blendSel').onchange=e=>{
+  const v=e.target.value;
+  if(v==='__random') photos.forEach(p=>p.blend=randBlend());
+  else photos.forEach(p=>p.blend=v);
+  compose();
+};
 $('effectSel').onchange=e=>{ effect=e.target.value; compose(); };
 let matColor='none';   // 作品の周囲（マット）: none / #000 / #fff
 function applyMat(){
