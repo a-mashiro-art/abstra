@@ -207,10 +207,10 @@
       display:block; padding:0; pointer-events:auto;
       background:linear-gradient(to left, rgba(11,11,13,.8), rgba(11,11,13,0));}
     .ctrl-group.leftg, .ctrl-group.right{display:contents;}
-    #composeBtn{position:absolute; top:16px; left:50%; transform:translateX(-50%); justify-self:auto;}
-    #shutterBtn{position:absolute; top:44%; left:50%; transform:translate(-50%,-50%);}
-    #txtbtn{position:absolute; left:50%; bottom:calc(env(safe-area-inset-bottom) + 64px); transform:translateX(-50%);}
-    #strobeBtn{position:absolute; left:50%; bottom:calc(env(safe-area-inset-bottom) + 16px); transform:translateX(-50%);}
+    #txtbtn{position:absolute; left:50%; top:calc(env(safe-area-inset-top) + 16px); transform:translateX(-50%);}
+    #strobeBtn{position:absolute; left:50%; top:calc(env(safe-area-inset-top) + 64px); transform:translateX(-50%);}
+    #shutterBtn{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);}
+    #composeBtn{position:absolute; top:auto; bottom:calc(env(safe-area-inset-bottom) + 16px); left:50%; transform:translateX(-50%); justify-self:auto;}
 
     .topctrls{left:74px; right:auto; justify-content:flex-start;}
 
@@ -969,11 +969,13 @@ function showEdit(){
   assignMergeJitter();
   compose();
   if(typeof disarmRetake==='function') disarmRetake();
+  $('strobeBtn').style.display='none';   // Merge押下でストロボを消す
 }
 function showCam(){
   stopGlitch();
   $('editView').style.display='none';
   $('camView').style.display='flex';
+  $('strobeBtn').style.display='';        // カメラ復帰で再表示
 }
 
 // events
