@@ -619,6 +619,13 @@ const composed=document.createElement('canvas');
 let globalBlend='overlay'; // フォールバック用
 let punchC=1.16, punchS=1.3; // 仕上げのコントラスト/彩度（Mergeでランダム）
 let satLevel=2; const SAT_LEVELS=[1.0,3.25,5.5,7.75,10.0]; // 彩度5段階(1〜10)
+const SAT_WEIGHTS=[5,4,3,2,1]; // 低彩度ほど出やすく（派手の偏りを抑制）
+function weightedIndex(weights){
+  let total=0; for(const w of weights) total+=w;
+  let r=Math.random()*total;
+  for(let i=0;i<weights.length;i++){ r-=weights[i]; if(r<0) return i; }
+  return weights.length-1;
+}
 let toneIdx=0; const TONE_LEVELS=[0,0.08,0.16,0.24,0.32]; let toneLift=0; // 中間調リフト(Off+4段)
 function randBlend(){ return BLENDS[(Math.random()*BLENDS.length)|0][0]; }
 let effect='normal';         // 表現エフェクト（スチール時）: normal / noise
@@ -674,7 +681,7 @@ function punchUp(ctx, W, H){
 // Merge時：blend/effectとは別の変形要素をランダム付与
 function assignMergeJitter(){
   punchC=1.12+Math.random()*0.28;  // コントラスト 1.12〜1.40（グレー感をトーンで解消）
-  satLevel=(Math.random()*SAT_LEVELS.length)|0;     // 彩度段階をランダム
+  satLevel=weightedIndex(SAT_WEIGHTS);              // 低彩度ほど出やすい重み付け
   punchS=SAT_LEVELS[satLevel];
   toneIdx=(Math.random()*TONE_LEVELS.length)|0;     // トーンリフトをランダム
   toneLift=TONE_LEVELS[toneIdx];
@@ -821,6 +828,14 @@ function applyEffect(){
     }
     octx.putImageData(img,0,0);
   }
+  // 白の上限を #fafafa (250) に制限（純白 #ffffff を出さない）
+  const cap=octx.getImageData(0,0,w,h), cd=cap.data;
+  for(let i=0;i<cd.length;i+=4){
+    if(cd[i]>250) cd[i]=250;
+    if(cd[i+1]>250) cd[i+1]=250;
+    if(cd[i+2]>250) cd[i+2]=250;
+  }
+  octx.putImageData(cap,0,0);
 }
 
 // --- グリッチ（撮影画像を使った動画／GIF用） ---
