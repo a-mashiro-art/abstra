@@ -48,6 +48,7 @@
   video,#result{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
   video{transform-origin:center center;}
   #result{object-fit:contain;background:var(--bg);display:none;}
+  #freeze{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;}
   #editStage{transition:background .15s;}
   #result.mat{top:5%;left:5%;width:90%;height:90%;}
   #result.fs{position:fixed;inset:0;width:100vw;height:100vh;z-index:50;cursor:zoom-out;}
@@ -259,6 +260,7 @@
   <div id="camView" style="display:flex;flex-direction:column;flex:1;min-height:0;">
     <div class="stage">
       <video id="video" playsinline autoplay muted></video>
+      <canvas id="freeze"></canvas>
       <div class="frame" id="frame"></div>
       <div class="topctrls" id="topctrls">
         <span class="brand-inline mono">Abstra<span class="by mono"> by A-Mashiro</span><span class="ver mono"></span><span class="lic mono">License</span></span>
@@ -387,7 +389,7 @@ The application is provided "as is", without warranty of any kind, express or im
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
 <script>
-const APP_VERSION='v2.7';
+const APP_VERSION='v2.8';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
@@ -1336,10 +1338,29 @@ window.addEventListener('orientationchange',()=>setTimeout(layoutFrame,300));
 const ULTRA=0.5; // 超広角の等倍係数（0.5×相当）
 function zMin(){ return ultraWideId ? ULTRA : 1; }
 function digitalScale(){ return (wideMode && ultraWideId) ? zoom/ULTRA : zoom; }
+let switchingLens=false;
+function showFreeze(){
+  const fz=$('freeze');
+  fz.width=video.videoWidth||1280; fz.height=video.videoHeight||720;
+  try{ fz.getContext('2d').drawImage(video,0,0,fz.width,fz.height); }catch(e){}
+  fz.style.transform=video.style.transform;
+  fz.style.display='block';
+}
+function hideFreeze(){ $('freeze').style.display='none'; }
+async function switchLens(toWide){
+  if(switchingLens || toWide===wideMode) return;
+  switchingLens=true; wideMode=toWide;
+  showFreeze();                 // 直前のフレームで黒画面を隠す
+  await startCam();
+  video.style.transform=`scale(${digitalScale()})`;
+  const done=()=>{ hideFreeze(); switchingLens=false; video.removeEventListener('playing',done); };
+  video.addEventListener('playing',done);
+  setTimeout(done, 700);        // フォールバック
+}
 function setZoom(z){
   zoom=Math.max(zMin(),Math.min(ZMAX,z));
   const wantWide = !!ultraWideId && zoom < 1;   // 1×未満は超広角レンズ
-  if(wantWide !== wideMode){ wideMode=wantWide; startCam(); } // レンズが変わる時だけ再取得
+  if(wantWide !== wideMode) switchLens(wantWide); // 必要な時だけ1回切替
   video.style.transform=`scale(${digitalScale()})`;
 }
 
