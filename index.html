@@ -150,6 +150,8 @@
   .blendrow .blabel{font-size:11px;color:var(--dim);letter-spacing:.12em;flex:0 0 auto;}
   .blendrow select,.savebar select,.blendrow input{flex:1;background:var(--field);color:var(--ink);border:1px solid var(--line);
     padding:9px 10px;font-size:13px;border-radius:2px;font-family:inherit;}
+  select:focus,input:focus,button:focus{outline:none;}
+  select:focus-visible,input:focus-visible{outline:none;box-shadow:none;}
   .blendrow input{min-width:0;}
   .savebar{display:flex;align-items:center;gap:12px;padding:11px 16px;
     background:var(--panel);border-top:1px solid var(--line);}
@@ -222,7 +224,9 @@
     #editStage{flex:0 0 70%; min-width:0; height:100%;}
     .editControls{flex:0 0 30%; width:30%; height:100%;
       overflow-y:auto; overscroll-behavior:contain; border-left:1px solid var(--line);}
-    .adv-panel.open{max-height:none;}
+    .adv-panel.open{max-height:none; overflow:visible;}
+    /* 区切り線をなくして右カラムを一枚の面に */
+    .adv-toggle, .blendrow, .savebar, .editbar{border-top:none;}
     .editbar{flex-direction:column; gap:10px;}
     .editbar .ghost{flex:1; width:auto;}
   }
