@@ -64,6 +64,20 @@
     white-space:nowrap;text-shadow:0 1px 4px rgba(0,0,0,.85);}
   .ver{font-size:9px;font-weight:400;letter-spacing:.02em;color:#fff;
     margin-left:5px;vertical-align:bottom;}
+  .by{font-size:10px;font-weight:400;letter-spacing:.04em;color:#fff;
+    vertical-align:bottom;}
+  .lic{margin-left:9px;color:#fff;cursor:pointer;font-size:9px;letter-spacing:.06em;
+    vertical-align:bottom;text-decoration:underline;pointer-events:auto;}
+  .lic-modal{position:fixed;inset:0;z-index:200;display:none;
+    background:rgba(0,0,0,.72);align-items:center;justify-content:center;padding:24px;}
+  .lic-modal.show{display:flex;}
+  .lic-box{background:var(--panel);border:1px solid var(--line);border-radius:6px;
+    max-width:520px;width:100%;max-height:80vh;overflow-y:auto;padding:22px;}
+  .lic-title{color:var(--ink);font-size:15px;font-weight:600;letter-spacing:.08em;margin:0 0 14px;}
+  .lic-text{color:var(--ink);font-size:12.5px;line-height:1.7;white-space:pre-wrap;}
+  .lic-close{margin-top:18px;width:100%;background:var(--field);color:var(--ink);
+    border:1px solid var(--line);border-radius:4px;padding:11px;cursor:pointer;
+    font-family:inherit;font-size:13px;letter-spacing:.1em;}
   .ratiobar,.modebar{display:flex;gap:2px;background:rgba(0,0,0,.55);
     border:1px solid var(--line);border-radius:3px;padding:2px;flex:0 0 auto;}
   .ratiobar button,.modebar button{background:none;border:none;color:var(--dim);
@@ -247,7 +261,7 @@
       <video id="video" playsinline autoplay muted></video>
       <div class="frame" id="frame"></div>
       <div class="topctrls" id="topctrls">
-        <span class="brand-inline mono">Abstra<span class="ver mono"></span></span>
+        <span class="brand-inline mono">Abstra<span class="by mono"> by A-Mashiro</span><span class="ver mono"></span><span class="lic mono">License</span></span>
         <div class="ratiobar mono" id="ratiobar">
           <button data-r="1:1" class="active">1:1</button>
           <button data-r="3:2">3:2</button>
@@ -255,7 +269,7 @@
         </div>
       </div>
       <div class="busy mono" id="busy">Removing text…</div>
-      <div class="brandCorner mono" id="brandCorner">Abstra<span class="ver mono"></span></div>
+      <div class="brandCorner mono" id="brandCorner">Abstra<span class="by mono"> by A-Mashiro</span><span class="ver mono"></span><span class="lic mono">License</span></div>
       <div class="camBottom">
         <div class="strip" id="strip"></div>
         <div class="controls">
@@ -356,13 +370,28 @@
 <div class="flash" id="flash"></div>
 <div class="preview" id="preview"><img id="previewImg" alt=""><button class="prev-del mono" id="prevDel" aria-label="Delete">Delete</button></div>
 
+<div class="lic-modal" id="licModal">
+  <div class="lic-box">
+    <div class="lic-title mono">Abstra — License</div>
+    <div class="lic-text mono">© 2026 A-Mashiro. All rights reserved.
+
+The Abstra application — including its source code, design, user interface, name, and branding — is the property of A-Mashiro. You may not copy, redistribute, sell, sublicense, or reverse-engineer the application itself without prior written permission.
+
+Ownership of artworks. Any image or artwork you create using Abstra belongs to you, its creator. You retain full ownership of the works you produce with this app and may use them freely, including for personal, commercial, exhibition, and NFT purposes. A-Mashiro claims no rights over your created works.
+
+The application is provided "as is", without warranty of any kind, express or implied. A-Mashiro shall not be liable for any damages arising from the use of this application.</div>
+    <button class="lic-close mono" id="licClose">Close</button>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
 <script>
-const APP_VERSION='v2.1';
+const APP_VERSION='v2.7';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
+let ultraWideId=null, normalBackId=null, wideMode=false; // 超広角対応
 let ratio={key:'1:1',w:1,h:1}; // w:h は縦長基準（短辺:長辺）
 let zoom=1; const ZMIN=1, ZMAX=5;
 let mode='still';            // 撮影前モード: still / glitch
@@ -384,19 +413,42 @@ const BLENDS=[
 
 const $=id=>document.getElementById(id);
 document.querySelectorAll('.ver').forEach(el=>el.textContent=APP_VERSION);
+document.querySelectorAll('.lic').forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); $('licModal').classList.add('show'); });
+$('licClose').onclick=()=>$('licModal').classList.remove('show');
+$('licModal').onclick=(e)=>{ if(e.target===$('licModal')) $('licModal').classList.remove('show'); };
 const video=$('video');
 
 async function startCam(){
   if(stream) stream.getTracks().forEach(t=>t.stop());
   try{
-    stream=await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:facing,width:{ideal:2560},height:{ideal:2560}},audio:false});
+    const v={width:{ideal:2560},height:{ideal:2560}};
+    if(wideMode && ultraWideId) v.deviceId={exact:ultraWideId};      // 超広角レンズ
+    else if(normalBackId) v.deviceId={exact:normalBackId};            // 標準背面
+    else v.facingMode=facing;                                        // 初回など
+    stream=await navigator.mediaDevices.getUserMedia({video:v,audio:false});
     video.srcObject=stream;
     torchTrack=stream.getVideoTracks()[0];
     const caps=torchTrack.getCapabilities ? torchTrack.getCapabilities() : {};
     torchOK=!!caps.torch;
     if(strobe && torchOK){ try{ await torchTrack.applyConstraints({advanced:[{torch:true}]}); }catch(e){} }
+    detectBackCameras(); // 許可後にラベルが取れるので毎回更新
   }catch(e){ toast('Cannot start camera: '+e.message); }
+}
+// 背面カメラを列挙し、超広角があれば検出して切替ボタンを表示
+async function detectBackCameras(){
+  try{
+    const devs=await navigator.mediaDevices.enumerateDevices();
+    const vids=devs.filter(d=>d.kind==='videoinput');
+    let ultra=null, normal=null;
+    for(const d of vids){
+      const L=(d.label||'').toLowerCase();
+      const back=L.includes('back')||L.includes('rear')||L.includes('environment')||L.includes('背面');
+      if(!back) continue;
+      if(L.includes('ultra')||L.includes('0.5')||L.includes('超広角')){ if(!L.includes('tele')) ultra=d.deviceId; }
+      else if(!normal && !L.includes('tele')) normal=d.deviceId;
+    }
+    ultraWideId=ultra; normalBackId=normal;
+  }catch(e){}
 }
 
 function toast(msg){
@@ -534,7 +586,7 @@ async function capture(){
 
   const f=frameRect();
   // object-fit:cover + デジタルズーム の表示→ソース画素へ逆算
-  const scale=Math.max(f.SW/vw, f.SH/vh)*zoom;
+  const scale=Math.max(f.SW/vw, f.SH/vh)*digitalScale();
   const offX=(f.SW-vw*scale)/2, offY=(f.SH-vh*scale)/2;
   let sx=(f.fx-offX)/scale, sy=(f.fy-offY)/scale;
   let sW=f.fw/scale, sH=f.fh/scale;
@@ -1280,10 +1332,15 @@ video.addEventListener('loadedmetadata',layoutFrame);
 window.addEventListener('resize',layoutFrame);
 window.addEventListener('orientationchange',()=>setTimeout(layoutFrame,300));
 
-// --- zoom（画面を押しながら上下ドラッグ／ピンチ） ---
+// --- zoom（画面を押しながら上下ドラッグ／ピンチ）。0.5×で超広角レンズに切替 ---
+const ULTRA=0.5; // 超広角の等倍係数（0.5×相当）
+function zMin(){ return ultraWideId ? ULTRA : 1; }
+function digitalScale(){ return (wideMode && ultraWideId) ? zoom/ULTRA : zoom; }
 function setZoom(z){
-  zoom=Math.max(ZMIN,Math.min(ZMAX,z));
-  video.style.transform=`scale(${zoom})`;
+  zoom=Math.max(zMin(),Math.min(ZMAX,z));
+  const wantWide = !!ultraWideId && zoom < 1;   // 1×未満は超広角レンズ
+  if(wantWide !== wideMode){ wideMode=wantWide; startCam(); } // レンズが変わる時だけ再取得
+  video.style.transform=`scale(${digitalScale()})`;
 }
 
 let pinchStart=null, dragZoom=null;
@@ -1304,7 +1361,7 @@ stage.addEventListener('touchmove',e=>{
   }else if(e.touches.length===1 && dragZoom){
     e.preventDefault();
     const dy=dragZoom.y - e.touches[0].clientY;      // 上=ズームイン
-    setZoom(dragZoom.z + dy/stage.clientHeight*(ZMAX-ZMIN)*1.4);
+    setZoom(dragZoom.z + dy/stage.clientHeight*(ZMAX-zMin())*1.4);
   }
 },{passive:false});
 stage.addEventListener('touchend',e=>{
