@@ -218,16 +218,22 @@
 
     .topctrls{left:74px; right:auto; justify-content:flex-start;}
 
-    /* 編集画面：左=プレビュー7割／右=操作3割。Adjustは既定で閉、
+    /* 編集画面：左=プレビュー65%／右=操作35%。Adjustは既定で閉、
        開くと右カラムが縦に伸びてスクロール。プレビューは不変 */
     #editView{flex-direction:row;}
-    #editStage{flex:0 0 70%; min-width:0; height:100%;}
-    .editControls{flex:0 0 30%; width:30%; height:100%;
+    #editStage{flex:0 0 65%; min-width:0; height:100%;}
+    .editControls{flex:0 0 35%; width:35%; height:100%;
       overflow-y:auto; overscroll-behavior:contain; border-left:1px solid var(--line);}
     .adv-panel.open{max-height:none; overflow:visible;}
     /* 区切り線をなくして右カラムを一枚の面に */
     .adv-toggle, .blendrow, .savebar, .editbar{border-top:none;}
-    .editbar{flex-direction:column; gap:10px;}
+    /* 余白を詰めてはみ出しを抑える */
+    .adv-toggle{padding:9px;}
+    .blendrow{padding:7px 12px;}
+    .savebar{padding:7px 12px;}
+    .editbar{flex-direction:column; gap:8px;
+      padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);}
+    .editbar button{padding:11px;}
     .editbar .ghost{flex:1; width:auto;}
   }
 </style>
@@ -353,7 +359,7 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
 <script>
-const APP_VERSION='v1.1';
+const APP_VERSION='v1.2';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
