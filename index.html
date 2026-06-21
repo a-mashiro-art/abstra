@@ -62,7 +62,7 @@
   .brand-inline{position:absolute;left:0;top:50%;transform:translateY(-50%);
     font-size:13px;letter-spacing:.16em;font-weight:600;color:var(--ink);
     white-space:nowrap;text-shadow:0 1px 4px rgba(0,0,0,.85);}
-  .ver{font-size:9px;font-weight:400;letter-spacing:.02em;color:var(--dim);
+  .ver{font-size:9px;font-weight:400;letter-spacing:.02em;color:#fff;
     margin-left:5px;vertical-align:bottom;}
   .ratiobar,.modebar{display:flex;gap:2px;background:rgba(0,0,0,.55);
     border:1px solid var(--line);border-radius:3px;padding:2px;flex:0 0 auto;}
@@ -211,10 +211,10 @@
       display:block; padding:0; pointer-events:auto;
       background:linear-gradient(to left, rgba(11,11,13,.8), rgba(11,11,13,0));}
     .ctrl-group.leftg, .ctrl-group.right{display:contents;}
-    #txtbtn{position:absolute; left:50%; top:calc(env(safe-area-inset-top) + 16px); transform:translateX(-50%);}
-    #strobeBtn{position:absolute; left:50%; top:calc(env(safe-area-inset-top) + 64px); transform:translateX(-50%);}
+    #txtbtn{position:absolute; left:50%; top:calc(env(safe-area-inset-top) + 4%); transform:translateX(-50%); min-width:92px;}
+    #strobeBtn{position:absolute; left:50%; top:calc(env(safe-area-inset-top) + 17%); transform:translateX(-50%); min-width:92px;}
     #shutterBtn{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);}
-    #composeBtn{position:absolute; top:auto; bottom:calc(env(safe-area-inset-bottom) + 16px); left:50%; transform:translateX(-50%); justify-self:auto;}
+    #composeBtn{position:absolute; top:auto; bottom:calc(env(safe-area-inset-bottom) + 4%); left:50%; transform:translateX(-50%); justify-self:auto; min-width:92px;}
 
     .topctrls{left:74px; right:auto; justify-content:flex-start;}
 
@@ -264,7 +264,7 @@
           </div>
           <button class="shutter" id="shutterBtn"><span></span></button>
           <div class="ctrl-group right">
-            <button class="ctrl-btn tgl on mono" id="txtbtn">Text</button>
+            <button class="ctrl-btn tgl mono" id="txtbtn">Text</button>
             <button class="ctrl-btn tgl mono" id="strobeBtn">⚡</button>
           </div>
         </div>
@@ -359,7 +359,7 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
 <script>
-const APP_VERSION='v1.2';
+const APP_VERSION='v1.6';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
@@ -371,7 +371,7 @@ let glitchPat=0;             // 0:スライス 1:ブロック 2:ウェーブ
 let glitchSpeed=95;          // 点滅速度(ms/フレーム)
 const GFRAMES=10;
 const GIF_WORKER='https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js';
-let textRemoval=true, busy=false;
+let textRemoval=false, busy=false;
 let strobe=false, torchTrack=null, torchOK=false;
 let ocrWorker=null, ocrReady=false;
 
