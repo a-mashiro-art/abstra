@@ -222,10 +222,6 @@
       <div class="frame" id="frame"></div>
       <div class="topctrls" id="topctrls">
         <span class="brand-inline mono">Abstra</span>
-        <div class="modebar mono" id="modebar">
-          <button data-mode="still" class="active">Still</button>
-          <button data-mode="glitch">Glitch</button>
-        </div>
         <div class="ratiobar mono" id="ratiobar">
           <button data-r="1:1" class="active">1:1</button>
           <button data-r="3:2">3:2</button>
@@ -276,22 +272,6 @@
           <option value="copier">Copier</option>
           <option value="silkscreen">Silkscreen</option>
         </select>
-      </div>
-      <div class="blendrow glitchonly">
-        <span class="blabel mono">Glitch</span>
-        <div class="bgtoggle mono" id="patToggle">
-          <button data-pat="0" class="active">Slice</button>
-          <button data-pat="1">Block</button>
-          <button data-pat="2">Wave</button>
-        </div>
-      </div>
-      <div class="blendrow glitchonly">
-        <span class="blabel mono">Speed</span>
-        <div class="bgtoggle mono" id="speedToggle">
-          <button data-ms="150">Slow</button>
-          <button data-ms="95" class="active">Mid</button>
-          <button data-ms="50">Fast</button>
-        </div>
       </div>
       <div class="blendrow">
         <span class="blabel mono">Border</span>
@@ -609,7 +589,6 @@ function renderStrip(){
   strip.appendChild(lbl);
   $('composeBtn').disabled=photos.length<MIN;
   $('ratiobar').classList.toggle('locked',photos.length>0);
-  $('modebar').classList.toggle('locked',photos.length>0);
 }
 
 // --- compose ---
@@ -991,18 +970,6 @@ $('result').addEventListener('click',()=>{
   if(fs){ r.style.background=(matColor!=='none'?matColor:'#000'); }
   else{ applyMat(); }
 });
-$('patToggle').onclick=e=>{
-  const b=e.target.closest('button'); if(!b) return;
-  glitchPat=+b.dataset.pat;
-  [...$('patToggle').children].forEach(x=>x.classList.toggle('active',x===b));
-  compose();
-};
-$('speedToggle').onclick=e=>{
-  const b=e.target.closest('button'); if(!b) return;
-  glitchSpeed=+b.dataset.ms;
-  [...$('speedToggle').children].forEach(x=>x.classList.toggle('active',x===b));
-  if(mode==='glitch') startGlitch();
-};
 
 $('advToggle').onclick=()=>{
   const open=$('advPanel').classList.toggle('open');
@@ -1164,14 +1131,6 @@ document.querySelectorAll('#ratiobar button').forEach(b=>{
     ratio={key:b.dataset.r,w:Math.min(...parts),h:Math.max(...parts)};
     document.querySelectorAll('#ratiobar button').forEach(x=>x.classList.toggle('active',x===b));
     layoutFrame();
-  };
-});
-
-document.querySelectorAll('#modebar button').forEach(b=>{
-  b.onclick=()=>{
-    if(photos.length){ toast('Cannot change mode while shooting'); return; }
-    mode=b.dataset.mode;
-    document.querySelectorAll('#modebar button').forEach(x=>x.classList.toggle('active',x===b));
   };
 });
 
