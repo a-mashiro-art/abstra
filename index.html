@@ -164,7 +164,7 @@
     border-radius:2px;cursor:pointer;border:1px solid var(--line);
     background:var(--field);color:var(--ink);font-weight:600;}
   .editbar .primary{background:var(--accent);border-color:var(--accent);color:#fff;}
-  .editbar button.armed{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .editbar button.armed{background-image:linear-gradient(rgba(255,255,255,.1),rgba(255,255,255,.1));}
   .editbar .ghost{flex:0 0 96px;}
 
   .toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 90px);
@@ -214,17 +214,11 @@
 
     .topctrls{left:74px; right:auto; justify-content:flex-start;}
 
-    /* 編集画面：左=結果(大)／右=操作パネル */
-    #editView{flex-direction:row;}
-    #editStage{flex:1; min-width:0;}
-    .editControls{flex:0 0 300px; width:300px; height:100%;
-      overflow-y:auto; overscroll-behavior:contain; border-left:1px solid var(--line);}
-    .adv-panel.open{max-height:none;}      /* クリックで展開 */
-    /* 開いたときはパネルを大きく広げ、項目だけスクロール・ボタンは下部固定 */
-    #editControls:has(.adv-panel.open){ flex-basis:64vw; width:64vw; overflow:hidden; }
-    #editControls:has(.adv-panel.open) .adv-panel{ flex:1 1 0; min-height:0; overflow-y:auto; }
-    .editbar{flex-direction:column; gap:10px;}
-    .editbar .ghost{flex:1; width:auto;}   /* RetakeをVariation/Saveと同じ仕上がりに */
+    /* 編集画面：縦積みスクロール。プレビューは固定高で開閉しても変わらず、
+       Adjustは全幅で下に伸び、ボタンは下にズレる */
+    #editView{flex-direction:column; overflow-y:auto; overscroll-behavior:contain;}
+    #editStage{flex:0 0 auto; height:56vh; min-height:0;}
+    .adv-panel.open{max-height:none; overflow:visible;}
   }
 </style>
 </head>
@@ -969,7 +963,12 @@ function showEdit(){
   assignMergeJitter();
   compose();
   if(typeof disarmRetake==='function') disarmRetake();
-  $('strobeBtn').style.display='none';   // Merge押下でストロボを消す
+  // Merge押下：ストロボ/トーチ（照明）を消す
+  strobe=false;
+  $('strobeBtn').classList.remove('on');
+  $('strobeBtn').style.display='none';
+  if(torchOK && torchTrack){ try{ torchTrack.applyConstraints({advanced:[{torch:false}]}); }catch(e){} }
+  $('flash').classList.remove('show');
 }
 function showCam(){
   stopGlitch();
