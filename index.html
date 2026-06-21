@@ -214,11 +214,15 @@
 
     .topctrls{left:74px; right:auto; justify-content:flex-start;}
 
-    /* 編集画面：縦積みスクロール。プレビューは固定高で開閉しても変わらず、
-       Adjustは全幅で下に伸び、ボタンは下にズレる */
-    #editView{flex-direction:column; overflow-y:auto; overscroll-behavior:contain;}
-    #editStage{flex:0 0 auto; height:56vh; min-height:0;}
-    .adv-panel.open{max-height:none; overflow:visible;}
+    /* 編集画面：左=プレビュー7割／右=操作3割。Adjustは既定で閉、
+       開くと右カラムが縦に伸びてスクロール。プレビューは不変 */
+    #editView{flex-direction:row;}
+    #editStage{flex:0 0 70%; min-width:0; height:100%;}
+    .editControls{flex:0 0 30%; width:30%; height:100%;
+      overflow-y:auto; overscroll-behavior:contain; border-left:1px solid var(--line);}
+    .adv-panel.open{max-height:none;}
+    .editbar{flex-direction:column; gap:10px;}
+    .editbar .ghost{flex:1; width:auto;}
   }
 </style>
 </head>
