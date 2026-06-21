@@ -62,6 +62,8 @@
   .brand-inline{position:absolute;left:0;top:50%;transform:translateY(-50%);
     font-size:13px;letter-spacing:.16em;font-weight:600;color:var(--ink);
     white-space:nowrap;text-shadow:0 1px 4px rgba(0,0,0,.85);}
+  .ver{font-size:9px;font-weight:400;letter-spacing:.02em;color:var(--dim);
+    margin-left:5px;vertical-align:bottom;}
   .ratiobar,.modebar{display:flex;gap:2px;background:rgba(0,0,0,.55);
     border:1px solid var(--line);border-radius:3px;padding:2px;flex:0 0 auto;}
   .ratiobar button,.modebar button{background:none;border:none;color:var(--dim);
@@ -235,7 +237,7 @@
       <video id="video" playsinline autoplay muted></video>
       <div class="frame" id="frame"></div>
       <div class="topctrls" id="topctrls">
-        <span class="brand-inline mono">Abstra</span>
+        <span class="brand-inline mono">Abstra<span class="ver mono"></span></span>
         <div class="ratiobar mono" id="ratiobar">
           <button data-r="1:1" class="active">1:1</button>
           <button data-r="3:2">3:2</button>
@@ -243,7 +245,7 @@
         </div>
       </div>
       <div class="busy mono" id="busy">Removing text…</div>
-      <div class="brandCorner mono" id="brandCorner">Abstra</div>
+      <div class="brandCorner mono" id="brandCorner">Abstra<span class="ver mono"></span></div>
       <div class="camBottom">
         <div class="strip" id="strip"></div>
         <div class="controls">
@@ -347,6 +349,7 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
 <script>
+const APP_VERSION='v1.0';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
@@ -370,6 +373,7 @@ const BLENDS=[
 ];
 
 const $=id=>document.getElementById(id);
+document.querySelectorAll('.ver').forEach(el=>el.textContent=APP_VERSION);
 const video=$('video');
 
 async function startCam(){
