@@ -615,6 +615,7 @@ function renderStrip(){
 // --- compose ---
 const composed=document.createElement('canvas');
 let globalBlend='overlay'; // フォールバック用
+let punchC=1.16, punchS=1.35; // 仕上げのコントラスト/彩度（Mergeでランダム）
 function randBlend(){ return BLENDS[(Math.random()*BLENDS.length)|0][0]; }
 let effect='normal';         // 表現エフェクト（スチール時）: normal / noise
 let fxScale=1;               // ノイズ/グリッチの強度スケール（別パターンでランダム）
@@ -648,9 +649,25 @@ function renderStack(){
   });
   ctx.filter='none';
   ctx.globalCompositeOperation='source-over';
+  punchUp(ctx, W, H);   // くすみ対策：コントラスト＋彩度を持ち上げる
+}
+// 合成のくすみを補正（コントラスト・彩度を上げる／Variationでランダム）
+function punchUp(ctx, W, H){
+  const img=ctx.getImageData(0,0,W,H), d=img.data;
+  const C=punchC, S=punchS;
+  for(let i=0;i<d.length;i+=4){
+    let r=(d[i]-128)*C+128, g=(d[i+1]-128)*C+128, b=(d[i+2]-128)*C+128;
+    const lum=0.299*r+0.587*g+0.114*b;
+    d[i]  =lum+(r-lum)*S;
+    d[i+1]=lum+(g-lum)*S;
+    d[i+2]=lum+(b-lum)*S;
+  }
+  ctx.putImageData(img,0,0);
 }
 // Merge時：blend/effectとは別の変形要素をランダム付与
 function assignMergeJitter(){
+  punchC=1.05+Math.random()*0.30;  // コントラスト 1.05〜1.35
+  punchS=1.15+Math.random()*0.55;  // 彩度 1.15〜1.70
   photos.forEach((p,i)=>{
     if(i===0){ p.jmag=0;p.jang=0;p.jblur=0;p.jrot=0;p.jflip=false;p.jscale=1; return; }
     p.jang=0; p.jmag=0;                 // ズレなし
