@@ -277,6 +277,14 @@
         </select>
       </div>
       <div class="blendrow">
+        <span class="blabel mono">Saturation</span>
+        <div class="bgtoggle mono" id="satToggle">
+          <button data-sat="0">Low</button>
+          <button data-sat="1" class="active">Mid</button>
+          <button data-sat="2">High</button>
+        </div>
+      </div>
+      <div class="blendrow">
         <span class="blabel mono">Border</span>
         <div class="bgtoggle mono" id="matToggle">
           <button data-mat="none" class="active">None</button>
@@ -389,30 +397,10 @@ function pickFromHist(hist){
   for(const e of hist.entries){ r-=e.wgt; if(r<=0){ const k=e.key; return {r:(k>>16)&255,g:(k>>8)&255,b:k&255}; } }
   const k=hist.entries[0].key; return {r:(k>>16)&255,g:(k>>8)&255,b:k&255};
 }
-// インク色の彩度を引き上げ（くすみ対策）。色相は保ち、わずかな色味も強調
-function boostSat(c, mul, minS){
-  let r=c.r/255, g=c.g/255, b=c.b/255;
-  const max=Math.max(r,g,b), min=Math.min(r,g,b), l=(max+min)/2, d=max-min;
-  let h=0, s=0;
-  if(d>0){
-    s = l>0.5 ? d/(2-max-min) : d/(max+min);
-    if(max===r) h=((g-b)/d+(g<b?6:0));
-    else if(max===g) h=((b-r)/d+2);
-    else h=((r-g)/d+4);
-    h/=6;
-  }
-  s=Math.min(1, s*mul);
-  if(s>0.04 && minS) s=Math.max(s, minS);  // 純グレーは色を付けない
-  const hue2=(p,q,t)=>{ if(t<0)t+=1; if(t>1)t-=1; if(t<1/6)return p+(q-p)*6*t; if(t<1/2)return q; if(t<2/3)return p+(q-p)*(2/3-t)*6; return p; };
-  let R,G,B;
-  if(s===0){ R=G=B=l; }
-  else{ const q=l<0.5?l*(1+s):l+s-l*s, p=2*l-q; R=hue2(p,q,h+1/3); G=hue2(p,q,h); B=hue2(p,q,h-1/3); }
-  return {r:Math.round(R*255), g:Math.round(G*255), b:Math.round(B*255)};
-}
 function pickColors(src){
-  const n=2+(Math.random()*4|0);   // 2〜5色
+  const n=2+(Math.random()*4|0);   // 2〜5色（撮影画像の色に忠実）
   const hist=colorHistogram(src);
-  const arr=[]; for(let i=0;i<n;i++) arr.push(boostSat(pickFromHist(hist), 1.8, 0.28));
+  const arr=[]; for(let i=0;i<n;i++) arr.push(pickFromHist(hist));
   return arr;
 }
 const randLevels=()=>10+(Math.random()*7|0); // 10〜16段
@@ -617,7 +605,8 @@ function renderStrip(){
 // --- compose ---
 const composed=document.createElement('canvas');
 let globalBlend='overlay'; // フォールバック用
-let punchC=1.16, punchS=1.35; // 仕上げのコントラスト/彩度（Mergeでランダム）
+let punchC=1.16, punchS=1.3; // 仕上げのコントラスト/彩度（Mergeでランダム）
+let satLevel=1; const SAT_LEVELS=[1.10,1.30,1.55]; // 彩度3段階 Low/Mid/High
 function randBlend(){ return BLENDS[(Math.random()*BLENDS.length)|0][0]; }
 let effect='normal';         // 表現エフェクト（スチール時）: normal / noise
 let fxScale=1;               // ノイズ/グリッチの強度スケール（別パターンでランダム）
@@ -668,8 +657,10 @@ function punchUp(ctx, W, H){
 }
 // Merge時：blend/effectとは別の変形要素をランダム付与
 function assignMergeJitter(){
-  punchC=1.05+Math.random()*0.30;  // コントラスト 1.05〜1.35
-  punchS=1.15+Math.random()*0.55;  // 彩度 1.15〜1.70
+  punchC=1.12+Math.random()*0.28;  // コントラスト 1.12〜1.40（グレー感をトーンで解消）
+  satLevel=(Math.random()*3)|0;     // 彩度3段階をランダム
+  punchS=SAT_LEVELS[satLevel];
+  setSatToggleUI();
   photos.forEach((p,i)=>{
     if(i===0){ p.jmag=0;p.jang=0;p.jblur=0;p.jrot=0;p.jflip=false;p.jscale=1; return; }
     p.jang=0; p.jmag=0;                 // ズレなし
@@ -986,6 +977,17 @@ $('matToggle').onclick=e=>{
   matColor=b.dataset.mat;
   [...$('matToggle').children].forEach(x=>x.classList.toggle('active',x===b));
   applyMat();
+};
+function setSatToggleUI(){
+  const t=$('satToggle'); if(!t) return;
+  [...t.children].forEach(x=>x.classList.toggle('active', +x.dataset.sat===satLevel));
+}
+$('satToggle').onclick=e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  satLevel=+b.dataset.sat;
+  punchS=SAT_LEVELS[satLevel];
+  setSatToggleUI();
+  compose();
 };
 $('result').addEventListener('click',()=>{
   const r=$('result'), back=$('fsBack');
