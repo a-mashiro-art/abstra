@@ -218,8 +218,11 @@
     #editStage{flex:1; min-width:0;}
     .editControls{flex:0 0 300px; width:300px; height:100%;
       overflow-y:auto; overscroll-behavior:contain; border-left:1px solid var(--line);}
-    .adv-panel.open{max-height:none;}
-    .editbar{flex-direction:column;}
+    .adv-toggle{display:none;}            /* 横向きは調整パネルを常時表示 */
+    .adv-panel{display:block;}
+    .editbar{flex-direction:column; gap:10px;}
+    .editbar #backBtn{align-self:flex-start; width:auto; padding:7px 16px;
+      font-size:12px; opacity:.85;}      /* Retakeは小さく誤タップ防止 */
   }
 </style>
 </head>
