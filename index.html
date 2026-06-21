@@ -268,6 +268,12 @@
           <option value="noise">Noise</option>
           <option value="8bit">8bit</option>
           <option value="16bit">16bit</option>
+          <option value="scanlines">Scanlines</option>
+          <option value="halftone">Halftone</option>
+          <option value="invert">Invert</option>
+          <option value="rgbshift">RGB Shift</option>
+          <option value="vignette">Vignette</option>
+          <option value="solarize">Solarize</option>
         </select>
       </div>
       <div class="blendrow glitchonly">
@@ -658,6 +664,51 @@ function applyEffect(){
   }
   else if(effect==='8bit'){ retro(octx,w,h,128,4); }
   else if(effect==='16bit'){ retro(octx,w,h,256,8); }
+  else if(effect==='scanlines'){
+    octx.globalCompositeOperation='multiply';
+    octx.fillStyle='rgba(0,0,0,0.55)';
+    const gap=Math.max(2, Math.round(h/360));
+    for(let y=0;y<h;y+=gap*2) octx.fillRect(0,y,w,gap);
+    octx.globalCompositeOperation='source-over';
+  }
+  else if(effect==='halftone'){
+    const src=octx.getImageData(0,0,w,h).data;
+    const cell=Math.max(4, Math.round(Math.min(w,h)/110));
+    octx.fillStyle='#0b0b0d'; octx.fillRect(0,0,w,h);
+    for(let y=0;y<h;y+=cell)for(let x=0;x<w;x+=cell){
+      const cx=Math.min(w-1,x+(cell>>1)), cy=Math.min(h-1,y+(cell>>1));
+      const p=(cy*w+cx)*4, r=src[p],g=src[p+1],b=src[p+2];
+      const lum=(0.299*r+0.587*g+0.114*b)/255, rad=(cell/2)*lum*1.25;
+      if(rad>0.3){ octx.beginPath(); octx.fillStyle='rgb('+r+','+g+','+b+')';
+        octx.arc(x+cell/2,y+cell/2,rad,0,6.2832); octx.fill(); }
+    }
+  }
+  else if(effect==='invert'){
+    const img=octx.getImageData(0,0,w,h), dd=img.data;
+    for(let i=0;i<dd.length;i+=4){ dd[i]=255-dd[i]; dd[i+1]=255-dd[i+1]; dd[i+2]=255-dd[i+2]; }
+    octx.putImageData(img,0,0);
+  }
+  else if(effect==='rgbshift'){
+    const img=octx.getImageData(0,0,w,h), dd=img.data, copy=new Uint8ClampedArray(dd);
+    const off=Math.max(2, Math.round(w*0.006*fxScale));
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+      const p=(y*w+x)*4, rx=Math.min(w-1,x+off), bx=Math.max(0,x-off);
+      dd[p]=copy[(y*w+rx)*4]; dd[p+2]=copy[(y*w+bx)*4+2];
+    }
+    octx.putImageData(img,0,0);
+  }
+  else if(effect==='vignette'){
+    const g=octx.createRadialGradient(w/2,h/2,Math.min(w,h)*0.3,w/2,h/2,Math.max(w,h)*0.72);
+    g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.72)');
+    octx.fillStyle=g; octx.fillRect(0,0,w,h);
+  }
+  else if(effect==='solarize'){
+    const img=octx.getImageData(0,0,w,h), dd=img.data;
+    for(let i=0;i<dd.length;i+=4){
+      for(let k=0;k<3;k++){ const v=dd[i+k]; dd[i+k]= v<128 ? v : 255-v; }
+    }
+    octx.putImageData(img,0,0);
+  }
 }
 
 // --- グリッチ（撮影画像を使った動画／GIF用） ---
@@ -796,7 +847,7 @@ $('composeBtn').onclick=showEdit;
 $('backBtn').onclick=()=>{ photos.length=0; renderStrip(); showCam(); };
 
 function randomizeStyle(){
-  const FX=['normal','noise','8bit','16bit'];
+  const FX=['normal','noise','8bit','16bit','scanlines','halftone','invert','rgbshift','vignette','solarize'];
   effect=FX[(Math.random()*FX.length)|0];
   glitchSeed=(Math.random()*1000)|0;     // グリッチ時のパターン
   fxScale=0.6+Math.random()*1.6;
