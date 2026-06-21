@@ -177,10 +177,10 @@
     z-index:30;transition:opacity .05s;}
   .flash.show{opacity:.95;}
   .preview img{max-width:100%;max-height:100%;object-fit:contain;border:1px solid var(--line);}
-  .prev-del{position:absolute;top:calc(env(safe-area-inset-top) + 14px);right:14px;
-    width:40px;height:40px;border-radius:50%;background:var(--accent);color:#fff;border:none;
-    font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;
-    box-shadow:0 4px 16px rgba(0,0,0,.55);z-index:2;}
+  .prev-del{position:absolute;top:calc(env(safe-area-inset-top) + 16px);right:18px;
+    background:none;border:none;color:#fff;
+    font-size:15px;letter-spacing:.1em;font-weight:600;cursor:pointer;
+    text-shadow:0 1px 6px rgba(0,0,0,.9);z-index:2;padding:6px;}
   .hint{position:absolute;top:58px;left:50%;transform:translateX(-50%);
     font-size:10px;color:var(--dim);background:rgba(0,0,0,.4);
     padding:5px 12px;border-radius:2px;}
@@ -318,7 +318,7 @@
 </div>
 <div class="toast mono" id="toast"></div>
 <div class="flash" id="flash"></div>
-<div class="preview" id="preview"><img id="previewImg" alt=""><button class="prev-del" id="prevDel" aria-label="Delete">✕</button></div>
+<div class="preview" id="preview"><img id="previewImg" alt=""><button class="prev-del mono" id="prevDel" aria-label="Delete">Delete</button></div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
@@ -377,15 +377,15 @@ function sampleColor(canvas){
 
 // --- 2色をランダム抽出 ---
 function pickColors(src){ return [sampleColor(src), sampleColor(src)]; }
-const randLevels=()=>3+(Math.random()*4|0); // 3〜6段
+const randLevels=()=>10; // 階調10固定
 
-// --- 大ぼかし → ランダム角度モーションブレ → ポスタライズ → 2色マッピング ---
+// --- 大ぼかし → ランダム角度モーションブレ → ポスタライズ → 2色マッピング（強さ約0.7） ---
 function treat(src, cA, cB, levels){
   const w=src.width, h=src.height;
   const n=Math.max(2,levels|0);
-  const baseBlur=Math.max(10, Math.min(w,h)*0.055);
-  const angle=Math.random()*Math.PI*2;            // 毎回ランダムな角度
-  const len=Math.max(24, Math.min(w,h)*0.15);     // ブレの長さ
+  const baseBlur=Math.max(7, Math.min(w,h)*0.0385);   // 元の0.7倍
+  const angle=Math.random()*Math.PI*2;                // 毎回ランダムな角度
+  const len=Math.max(17, Math.min(w,h)*0.105);        // ブレの長さ（元の0.7倍）
   const steps=14;
 
   // 1) ガウスぼかし
@@ -401,7 +401,7 @@ function treat(src, cA, cB, levels){
   const ca=Math.cos(angle), sa=Math.sin(angle);
   for(let i=0;i<steps;i++){
     const t=(i/(steps-1)-0.5)*len;
-    mctx.globalAlpha=1/(i+1);                      // 逐次平均で滑らかなスメア
+    mctx.globalAlpha=1/(i+1);
     mctx.drawImage(blr, ca*t, sa*t);
   }
   mctx.globalAlpha=1;
