@@ -273,7 +273,7 @@
           <option value="invert">Invert</option>
           <option value="rgbshift">RGB Shift</option>
           <option value="vignette">Vignette</option>
-          <option value="solarize">Solarize</option>
+          <option value="copier">Copier</option>
         </select>
       </div>
       <div class="blendrow glitchonly">
@@ -603,25 +603,38 @@ function renderStack(){
   const ctx=composed.getContext('2d');
   ctx.globalCompositeOperation='source-over';
   ctx.fillStyle='#000'; ctx.fillRect(0,0,W,H);
-  const maxShift=Math.min(W,H)*0.04, maxBlur=Math.min(W,H)*0.015, m=maxShift;
+  const maxShift=Math.min(W,H)*0.10, maxBlur=Math.min(W,H)*0.015;
   photos.forEach((p,i)=>{
     ctx.globalCompositeOperation=i===0?'source-over':(p.blend||globalBlend);
-    const mag=(p.jmag||0)*maxShift, ang=p.jang||0;
-    const dx=Math.cos(ang)*mag, dy=Math.sin(ang)*mag;
     const bl=(p.jblur||0)*maxBlur;
     ctx.filter = bl>0.3 ? ('blur('+bl+'px)') : 'none';
-    ctx.drawImage(p.tinted, dx-m, dy-m, W+2*m, H+2*m); // 余白分拡大して黒縁を防止
+    if(i===0){
+      ctx.drawImage(p.tinted,0,0,W,H);            // 1枚目は土台（変形なし）
+    } else {
+      const mag=(p.jmag||0)*maxShift;
+      const dx=Math.cos(p.jang||0)*mag, dy=Math.sin(p.jang||0)*mag;
+      const sc=p.jscale||1, fx=p.jflip?-1:1;
+      ctx.save();
+      ctx.translate(W/2+dx, H/2+dy);              // ズレ
+      ctx.rotate(p.jrot||0);                       // 回転
+      ctx.scale(sc*fx, sc);                        // スケール＋左右反転
+      ctx.drawImage(p.tinted, -W/2, -H/2, W, H);
+      ctx.restore();
+    }
   });
   ctx.filter='none';
   ctx.globalCompositeOperation='source-over';
 }
-// Merge時：各オーバーレイにランダムなブレ(ぼかし)とズレ(位置) 0.5〜1.0
+// Merge時：blend/effectとは別の変形要素をランダム付与
 function assignMergeJitter(){
   photos.forEach((p,i)=>{
-    if(i===0){ p.jmag=0; p.jang=0; p.jblur=0; return; } // 1枚目(土台)は動かさない
+    if(i===0){ p.jmag=0;p.jang=0;p.jblur=0;p.jrot=0;p.jflip=false;p.jscale=1; return; }
     p.jang=Math.random()*6.2832;
-    p.jmag=0.5+Math.random()*0.5;
-    p.jblur=0.5+Math.random()*0.5;
+    p.jmag=0.5+Math.random()*0.5;       // ズレ 0.5〜1.0
+    p.jblur=0.5+Math.random()*0.5;      // ブレ 0.5〜1.0
+    p.jrot=(Math.random()-0.5)*0.35;    // 回転 ±約10°
+    p.jflip=Math.random()<0.5;          // 左右反転
+    p.jscale=0.9+Math.random()*0.4;     // スケール 0.9〜1.3
   });
 }
 
@@ -718,10 +731,14 @@ function applyEffect(){
     g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.72)');
     octx.fillStyle=g; octx.fillRect(0,0,w,h);
   }
-  else if(effect==='solarize'){
+  else if(effect==='copier'){
+    // コピー機風：白黒ハイコントラスト＋トナーのザラつき（1bit化）
     const img=octx.getImageData(0,0,w,h), dd=img.data;
     for(let i=0;i<dd.length;i+=4){
-      for(let k=0;k<3;k++){ const v=dd[i+k]; dd[i+k]= v<128 ? v : 255-v; }
+      let lum=0.299*dd[i]+0.587*dd[i+1]+0.114*dd[i+2];
+      lum+=(Math.random()-0.5)*70;            // トナーのムラ/ディザ
+      const v = lum<130 ? 0 : 255;            // 黒インク or 白紙
+      dd[i]=v; dd[i+1]=v; dd[i+2]=v;
     }
     octx.putImageData(img,0,0);
   }
@@ -864,7 +881,7 @@ $('composeBtn').onclick=showEdit;
 $('backBtn').onclick=()=>{ photos.length=0; renderStrip(); showCam(); };
 
 function randomizeStyle(){
-  const FX=['normal','noise','8bit','16bit','scanlines','halftone','invert','rgbshift','vignette','solarize'];
+  const FX=['normal','noise','8bit','16bit','scanlines','halftone','invert','rgbshift','vignette','copier'];
   effect=FX[(Math.random()*FX.length)|0];
   glitchSeed=(Math.random()*1000)|0;     // グリッチ時のパターン
   fxScale=0.6+Math.random()*1.6;
