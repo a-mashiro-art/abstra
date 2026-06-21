@@ -164,6 +164,7 @@
     border-radius:2px;cursor:pointer;border:1px solid var(--line);
     background:var(--field);color:var(--ink);font-weight:600;}
   .editbar .primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .editbar button.armed{background:var(--accent);border-color:var(--accent);color:#fff;}
   .editbar .ghost{flex:0 0 96px;}
 
   .toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 90px);
@@ -218,7 +219,10 @@
     #editStage{flex:1; min-width:0;}
     .editControls{flex:0 0 300px; width:300px; height:100%;
       overflow-y:auto; overscroll-behavior:contain; border-left:1px solid var(--line);}
-    .adv-panel.open{max-height:none;}      /* クリックで展開・カラム内でスクロール */
+    .adv-panel.open{max-height:none;}      /* クリックで展開 */
+    /* 開いたときはパネルを大きく広げ、項目だけスクロール・ボタンは下部固定 */
+    #editControls:has(.adv-panel.open){ flex-basis:64vw; width:64vw; overflow:hidden; }
+    #editControls:has(.adv-panel.open) .adv-panel{ flex:1 1 0; min-height:0; overflow-y:auto; }
     .editbar{flex-direction:column; gap:10px;}
     .editbar .ghost{flex:1; width:auto;}   /* RetakeをVariation/Saveと同じ仕上がりに */
   }
@@ -964,6 +968,7 @@ function showEdit(){
   shufflePhotos();
   assignMergeJitter();
   compose();
+  if(typeof disarmRetake==='function') disarmRetake();
 }
 function showCam(){
   stopGlitch();
@@ -984,7 +989,26 @@ $('txtbtn').onclick=()=>{
   if(textRemoval) initOCR();
 };
 $('composeBtn').onclick=showEdit;
-$('backBtn').onclick=()=>{ photos.length=0; renderStrip(); showCam(); };
+let retakeArmed=false, retakeTimer=null;
+function disarmRetake(){
+  retakeArmed=false;
+  const b=$('backBtn'); if(b){ b.classList.remove('armed'); }
+  if(retakeTimer){ clearTimeout(retakeTimer); retakeTimer=null; }
+}
+$('backBtn').onclick=()=>{
+  if(!retakeArmed){                 // 1タップ目：選択状態（見た目のみ）
+    retakeArmed=true;
+    $('backBtn').classList.add('armed');
+    retakeTimer=setTimeout(disarmRetake, 3000);  // 3秒で自動解除
+    return;
+  }
+  disarmRetake();                   // 2タップ目：実行
+  photos.length=0; renderStrip(); showCam();
+};
+// 他の場所をタップしたら選択を解除
+document.addEventListener('click',(e)=>{
+  if(retakeArmed && !e.target.closest('#backBtn')) disarmRetake();
+});
 
 function randomizeStyle(){
   const FX=['normal','noise','8bit','16bit','scanlines','halftone','invert','rgbshift','bloom','copier','silkscreen'];
