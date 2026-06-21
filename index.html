@@ -272,8 +272,9 @@
           <option value="halftone">Halftone</option>
           <option value="invert">Invert</option>
           <option value="rgbshift">RGB Shift</option>
-          <option value="vignette">Vignette</option>
+          <option value="bloom">Bloom</option>
           <option value="copier">Copier</option>
+          <option value="silkscreen">Silkscreen</option>
         </select>
       </div>
       <div class="blendrow glitchonly">
@@ -381,11 +382,34 @@ function sampleColor(canvas){
   return {r:d[p],g:d[p+1],b:d[p+2]};
 }
 
-// --- 2色をランダム抽出 ---
-// --- 2〜5色をランダム抽出 ---
+// --- 2〜5色を抽出。支配色（面積が大きい色）の偏りを抑える ---
+// 色頻度を集計し、weight = freq^0.6（約6割に圧縮）で重み付け抽選
+function colorHistogram(canvas){
+  const w=canvas.width, h=canvas.height;
+  const d=canvas.getContext('2d').getImageData(0,0,w,h).data;
+  const step=Math.max(1, Math.floor((w*h)/40000)); // 速度のため間引き
+  const map=new Map();
+  for(let i=0;i<d.length;i+=4*step){
+    const r=d[i]&0xF0, g=d[i+1]&0xF0, b=d[i+2]&0xF0; // 16段階に量子化
+    const key=(r<<16)|(g<<8)|b;
+    map.set(key,(map.get(key)||0)+1);
+  }
+  const entries=[]; let total=0;
+  for(const [key,cnt] of map){
+    const wgt=Math.pow(cnt,0.6);  // 支配色を抑制（0.6乗）
+    total+=wgt; entries.push({key,wgt});
+  }
+  return {entries,total};
+}
+function pickFromHist(hist){
+  let r=Math.random()*hist.total;
+  for(const e of hist.entries){ r-=e.wgt; if(r<=0){ const k=e.key; return {r:(k>>16)&255,g:(k>>8)&255,b:k&255}; } }
+  const k=hist.entries[0].key; return {r:(k>>16)&255,g:(k>>8)&255,b:k&255};
+}
 function pickColors(src){
   const n=2+(Math.random()*4|0);   // 2〜5色
-  const arr=[]; for(let i=0;i<n;i++) arr.push(sampleColor(src));
+  const hist=colorHistogram(src);
+  const arr=[]; for(let i=0;i<n;i++) arr.push(pickFromHist(hist));
   return arr;
 }
 const randLevels=()=>10+(Math.random()*7|0); // 10〜16段
@@ -725,10 +749,23 @@ function applyEffect(){
     }
     octx.putImageData(img,0,0);
   }
-  else if(effect==='vignette'){
-    const g=octx.createRadialGradient(w/2,h/2,Math.min(w,h)*0.3,w/2,h/2,Math.max(w,h)*0.72);
-    g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.72)');
-    octx.fillStyle=g; octx.fillRect(0,0,w,h);
+  else if(effect==='bloom'){
+    // 明るい部分を抽出→ぼかし→スクリーン合成でふんわり発光
+    const tmp=document.createElement('canvas'); tmp.width=w; tmp.height=h;
+    const tctx=tmp.getContext('2d');
+    tctx.drawImage(composed,0,0);
+    const im=tctx.getImageData(0,0,w,h), dd=im.data;
+    for(let i=0;i<dd.length;i+=4){
+      const lum=0.299*dd[i]+0.587*dd[i+1]+0.114*dd[i+2];
+      const k = lum>150 ? 1 : 0;            // 明部のみ
+      dd[i]*=k; dd[i+1]*=k; dd[i+2]*=k;
+    }
+    tctx.putImageData(im,0,0);
+    octx.globalCompositeOperation='screen';
+    octx.filter='blur('+Math.max(4, Math.min(w,h)*0.02)+'px)';
+    octx.drawImage(tmp,0,0);
+    octx.filter='none';
+    octx.globalCompositeOperation='source-over';
   }
   else if(effect==='copier'){
     // コピー機風：白黒ハイコントラスト＋トナーのザラつき（1bit化）
@@ -738,6 +775,19 @@ function applyEffect(){
       lum+=(Math.random()-0.5)*70;            // トナーのムラ/ディザ
       const v = lum<130 ? 0 : 255;            // 黒インク or 白紙
       dd[i]=v; dd[i+1]=v; dd[i+2]=v;
+    }
+    octx.putImageData(img,0,0);
+  }
+  else if(effect==='silkscreen'){
+    // シルクスクリーン風：フラットな数段の色面＋コントラスト＋インクのザラつき
+    const img=octx.getImageData(0,0,w,h), dd=img.data;
+    const levels=3, step=255/(levels-1);
+    for(let i=0;i<dd.length;i+=4){
+      for(let k=0;k<3;k++){
+        let v=(dd[i+k]-128)*1.35+128;         // コントラスト強調
+        v=Math.round(v/step)*step;            // フラット化（版の色面）
+        dd[i+k]=v+(Math.random()-0.5)*20;     // インクのザラつき
+      }
     }
     octx.putImageData(img,0,0);
   }
@@ -880,7 +930,7 @@ $('composeBtn').onclick=showEdit;
 $('backBtn').onclick=()=>{ photos.length=0; renderStrip(); showCam(); };
 
 function randomizeStyle(){
-  const FX=['normal','noise','8bit','16bit','scanlines','halftone','invert','rgbshift','vignette','copier'];
+  const FX=['normal','noise','8bit','16bit','scanlines','halftone','invert','rgbshift','bloom','copier','silkscreen'];
   effect=FX[(Math.random()*FX.length)|0];
   glitchSeed=(Math.random()*1000)|0;     // グリッチ時のパターン
   fxScale=0.6+Math.random()*1.6;
