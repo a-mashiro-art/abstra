@@ -376,16 +376,32 @@ function sampleColor(canvas){
 }
 
 // --- 2色をランダム抽出 ---
-function pickColors(src){ return [sampleColor(src), sampleColor(src)]; }
-const randLevels=()=>10; // 階調10固定
+// --- 2〜5色をランダム抽出 ---
+function pickColors(src){
+  const n=2+(Math.random()*4|0);   // 2〜5色
+  const arr=[]; for(let i=0;i<n;i++) arr.push(sampleColor(src));
+  return arr;
+}
+const randLevels=()=>10+(Math.random()*7|0); // 10〜16段
 
-// --- 大ぼかし → ランダム角度モーションブレ → ポスタライズ → 2色マッピング（強さ約0.7） ---
-function treat(src, cA, cB, levels){
+// パレット（複数色）を輝度t(0..1)で補間
+function paletteColor(colors, t){
+  const m=colors.length;
+  if(m<=1) return colors[0];
+  const x=t*(m-1); let i=Math.floor(x); if(i>m-2) i=m-2; const f=x-i;
+  const a=colors[i], b=colors[i+1];
+  return { r:a.r+(b.r-a.r)*f, g:a.g+(b.g-a.g)*f, b:a.b+(b.b-a.b)*f };
+}
+
+// --- 大ぼかし → ランダム角度モーションブレ → ポスタライズ → 多色マッピング ---
+function treat(src, colors, levels){
   const w=src.width, h=src.height;
   const n=Math.max(2,levels|0);
-  const baseBlur=Math.max(7, Math.min(w,h)*0.0385);   // 元の0.7倍
-  const angle=Math.random()*Math.PI*2;                // 毎回ランダムな角度
-  const len=Math.max(17, Math.min(w,h)*0.105);        // ブレの長さ（元の0.7倍）
+  const sfBlur=0.4+Math.random()*0.6;                  // ぼかし強度 0.4〜1.0
+  const sfMotion=0.4+Math.random()*0.6;                // ブレ強度 0.4〜1.0（独立）
+  const baseBlur=Math.max(7, Math.min(w,h)*0.0385)*sfBlur;
+  const angle=Math.random()*Math.PI*2;
+  const len=Math.max(17, Math.min(w,h)*0.105)*sfMotion;
   const steps=14;
 
   // 1) ガウスぼかし
@@ -406,22 +422,20 @@ function treat(src, cA, cB, levels){
   }
   mctx.globalAlpha=1;
 
-  // 3) ポスタライズ → 2色マッピング
+  // 3) ポスタライズ → 多色マッピング
   const img=mctx.getImageData(0,0,w,h);
   const d=img.data;
   for(let i=0;i<d.length;i+=4){
     let lum=(0.299*d[i]+0.587*d[i+1]+0.114*d[i+2])/255;
     lum=Math.pow(lum,0.9);
     lum=Math.round(lum*(n-1))/(n-1);
-    d[i]  =cA.r+(cB.r-cA.r)*lum;
-    d[i+1]=cA.g+(cB.g-cA.g)*lum;
-    d[i+2]=cA.b+(cB.b-cA.b)*lum;
-    d[i+3]=255;
+    const col=paletteColor(colors,lum);
+    d[i]=col.r; d[i+1]=col.g; d[i+2]=col.b; d[i+3]=255;
   }
   mctx.putImageData(img,0,0);
   return mo;
 }
-function grad(p){ return `linear-gradient(135deg, ${rgb(p.cA)}, ${rgb(p.cB)})`; }
+function grad(p){ return 'linear-gradient(135deg,'+p.colors.map(rgb).join(',')+')'; }
 
 function frameRect(){
   const stage=document.querySelector('#camView .stage');
@@ -474,9 +488,9 @@ async function capture(){
     $('busy').classList.remove('show'); busy=false;
   }
 
-  const [cA,cB]=pickColors(c);
+  const colors=pickColors(c);
   const levels=randLevels();
-  photos.push({src:c,cA,cB,levels,tinted:treat(c,cA,cB,levels)});
+  photos.push({src:c,colors,levels,tinted:treat(c,colors,levels)});
   renderStrip();
 }
 
@@ -786,9 +800,9 @@ function randomizeStyle(){
 }
 $('rerollAllBtn').onclick=()=>{
   photos.forEach(p=>{
-    [p.cA,p.cB]=pickColors(p.src);
+    p.colors=pickColors(p.src);
     p.levels=randLevels();
-    p.tinted=treat(p.src,p.cA,p.cB,p.levels);
+    p.tinted=treat(p.src,p.colors,p.levels);
   });
   randomizeStyle();
   shufflePhotos();
