@@ -599,14 +599,30 @@ let glitchSeed=0;            // グリッチのパターン種（別パターン
 function renderStack(){
   const base=photos[0].src;
   composed.width=base.width; composed.height=base.height;
+  const W=composed.width, H=composed.height;
   const ctx=composed.getContext('2d');
   ctx.globalCompositeOperation='source-over';
-  ctx.fillStyle='#000'; ctx.fillRect(0,0,composed.width,composed.height);
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,W,H);
+  const maxShift=Math.min(W,H)*0.04, maxBlur=Math.min(W,H)*0.015, m=maxShift;
   photos.forEach((p,i)=>{
     ctx.globalCompositeOperation=i===0?'source-over':(p.blend||globalBlend);
-    ctx.drawImage(p.tinted,0,0,composed.width,composed.height);
+    const mag=(p.jmag||0)*maxShift, ang=p.jang||0;
+    const dx=Math.cos(ang)*mag, dy=Math.sin(ang)*mag;
+    const bl=(p.jblur||0)*maxBlur;
+    ctx.filter = bl>0.3 ? ('blur('+bl+'px)') : 'none';
+    ctx.drawImage(p.tinted, dx-m, dy-m, W+2*m, H+2*m); // 余白分拡大して黒縁を防止
   });
+  ctx.filter='none';
   ctx.globalCompositeOperation='source-over';
+}
+// Merge時：各オーバーレイにランダムなブレ(ぼかし)とズレ(位置) 0.5〜1.0
+function assignMergeJitter(){
+  photos.forEach((p,i)=>{
+    if(i===0){ p.jmag=0; p.jang=0; p.jblur=0; return; } // 1枚目(土台)は動かさない
+    p.jang=Math.random()*6.2832;
+    p.jmag=0.5+Math.random()*0.5;
+    p.jblur=0.5+Math.random()*0.5;
+  });
 }
 
 function fxHash(x,y){ // 0..1 の決定論的擬似乱数
@@ -823,6 +839,7 @@ function showEdit(){
   $('result').classList.remove('fs');
   fillBlendSelect();
   shufflePhotos();
+  assignMergeJitter();
   compose();
 }
 function showCam(){
@@ -863,6 +880,7 @@ $('rerollAllBtn').onclick=()=>{
   });
   randomizeStyle();
   shufflePhotos();
+  assignMergeJitter();
   compose();
 };
 $('blendSel').onchange=e=>{
