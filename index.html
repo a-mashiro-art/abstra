@@ -629,12 +629,11 @@ function renderStack(){
 function assignMergeJitter(){
   photos.forEach((p,i)=>{
     if(i===0){ p.jmag=0;p.jang=0;p.jblur=0;p.jrot=0;p.jflip=false;p.jscale=1; return; }
-    p.jang=Math.random()*6.2832;
-    p.jmag=0.5+Math.random()*0.5;       // ズレ 0.5〜1.0
-    p.jblur=0.5+Math.random()*0.5;      // ブレ 0.5〜1.0
-    p.jrot=(Math.random()-0.5)*0.35;    // 回転 ±約10°
+    p.jang=0; p.jmag=0;                 // ズレなし
+    p.jblur=0.5+Math.random()*0.5;      // ブレ 0.5〜1.0（短辺最大1.5%）
+    p.jrot=(Math.random()-0.5)*Math.PI; // 回転 ±約90°
     p.jflip=Math.random()<0.5;          // 左右反転
-    p.jscale=0.9+Math.random()*0.4;     // スケール 0.9〜1.3
+    p.jscale=1.5+Math.random()*2.5;     // スケール 1.5〜4倍
   });
 }
 
