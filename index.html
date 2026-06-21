@@ -606,7 +606,7 @@ function renderStrip(){
 const composed=document.createElement('canvas');
 let globalBlend='overlay'; // フォールバック用
 let punchC=1.16, punchS=1.3; // 仕上げのコントラスト/彩度（Mergeでランダム）
-let satLevel=1; const SAT_LEVELS=[1.10,1.30,1.55]; // 彩度3段階 Low/Mid/High
+let satLevel=1; const SAT_LEVELS=[1.0,1.8,2.8]; // 彩度3段階 Low(忠実)/Mid/High(鮮烈)
 function randBlend(){ return BLENDS[(Math.random()*BLENDS.length)|0][0]; }
 let effect='normal';         // 表現エフェクト（スチール時）: normal / noise
 let fxScale=1;               // ノイズ/グリッチの強度スケール（別パターンでランダム）
