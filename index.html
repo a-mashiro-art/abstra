@@ -366,7 +366,7 @@ The application is provided "as is", without warranty of any kind, express or im
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
 <script>
-const APP_VERSION='v3.5';
+const APP_VERSION='v3.8';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
@@ -1310,8 +1310,7 @@ async function saveOrShare(blob, filename, fallbackMsg){
   toast(fallbackMsg);
 }
 
-$('saveBtn').onclick=()=>{
-  if(mode==='glitch'){ saveGif(); return; }
+function buildExportBlob(){
   const longEdge=parseInt($('sizeSel').value,10)||1920;
   const rc=$('result'), w=rc.width, h=rc.height;
   const scale=longEdge/Math.max(w,h);
@@ -1322,8 +1321,12 @@ $('saveBtn').onclick=()=>{
   ectx.drawImage(rc,0,0,ex.width,ex.height);
   let bytes=dataURLtoBytes(ex.toDataURL('image/png'));
   bytes=addPngMeta(bytes, buildPngMeta());
-  const blob=new Blob([bytes],{type:'image/png'});
-  saveOrShare(blob, fileStamp()+'.png', 'Saved (long edge '+longEdge+'px)');
+  return { blob:new Blob([bytes],{type:'image/png'}), filename:fileStamp()+'.png', longEdge };
+}
+$('saveBtn').onclick=()=>{
+  if(mode==='glitch'){ saveGif(); return; }
+  const {blob, filename, longEdge}=buildExportBlob();
+  saveOrShare(blob, filename, 'Saved (long edge '+longEdge+'px)');
 };
 
 function saveGif(){
