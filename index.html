@@ -163,6 +163,7 @@
   .blendrow{display:flex;align-items:center;gap:12px;padding:11px 14px;
     background:var(--panel);border-top:1px solid var(--line);}
   .blendrow .blabel{font-size:11px;color:var(--dim);letter-spacing:.12em;flex:0 0 auto;}
+  .blendrow .bval{flex:1;text-align:right;font-size:13px;color:var(--ink);letter-spacing:.06em;}
   .blendrow select,.savebar select,.blendrow input{flex:1;background:var(--field);color:var(--ink);border:1px solid var(--line);
     padding:9px 10px;font-size:13px;border-radius:2px;font-family:inherit;}
   select:focus,input:focus,button:focus{outline:none;}
@@ -299,50 +300,26 @@
     <div class="adv-panel" id="advPanel">
       <div class="blendrow">
         <span class="blabel mono">Blend</span>
-        <select id="blendSel" class="mono"></select>
+        <span class="bval mono" id="blendVal">Random</span>
       </div>
       <div class="blendrow stillonly">
         <span class="blabel mono">Effect</span>
-        <select id="effectSel" class="mono">
-          <option value="normal">Normal</option>
-          <option value="noise">Noise</option>
-          <option value="8bit">8bit</option>
-          <option value="16bit">16bit</option>
-          <option value="scanlines">Scanlines</option>
-          <option value="halftone">Halftone</option>
-          <option value="invert">Invert</option>
-          <option value="rgbshift">RGB Shift</option>
-          <option value="bloom">Bloom</option>
-          <option value="copier">Copier</option>
-          <option value="silkscreen">Silkscreen</option>
-        </select>
+        <span class="bval mono" id="effectVal">—</span>
       </div>
       <div class="blendrow">
         <span class="blabel mono">Saturation</span>
-        <div class="bgtoggle mono" id="satToggle">
-          <button data-sat="0">1</button>
-          <button data-sat="1">2</button>
-          <button data-sat="2" class="active">3</button>
-          <button data-sat="3">4</button>
-          <button data-sat="4">5</button>
-        </div>
+        <span class="bval mono" id="satVal">—</span>
       </div>
       <div class="blendrow">
         <span class="blabel mono">Tone</span>
-        <div class="bgtoggle mono" id="toneToggle">
-          <button data-tone="0" class="active">Off</button>
-          <button data-tone="1">1</button>
-          <button data-tone="2">2</button>
-          <button data-tone="3">3</button>
-          <button data-tone="4">4</button>
-        </div>
+        <span class="bval mono" id="toneVal">—</span>
       </div>
       <div class="blendrow">
         <span class="blabel mono">Border</span>
         <div class="bgtoggle mono" id="matToggle">
-          <button data-mat="none" class="active">None</button>
+          <button data-mat="#fff" class="active">White</button>
           <button data-mat="#000">Black</button>
-          <button data-mat="#fff">White</button>
+          <button data-mat="none">None</button>
         </div>
       </div>
       <div class="blendrow">
@@ -389,7 +366,7 @@ The application is provided "as is", without warranty of any kind, express or im
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
 <script>
-const APP_VERSION='v2.8';
+const APP_VERSION='v3.3';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
@@ -767,8 +744,6 @@ function assignMergeJitter(){
   punchS=SAT_LEVELS[satLevel];
   toneIdx=(Math.random()*TONE_LEVELS.length)|0;     // トーンリフトをランダム
   toneLift=TONE_LEVELS[toneIdx];
-  setSatToggleUI();
-  setToneToggleUI();
   photos.forEach((p,i)=>{
     if(i===0){ p.jmag=0;p.jang=0;p.jblur=0;p.jrot=0;p.jflip=false;p.jscale=1; return; }
     p.jang=0; p.jmag=0;                 // ズレなし
@@ -796,7 +771,7 @@ function compose(){
   if(mode==='glitch'){ startGlitch(); }
   else { stopGlitch(); applyEffect(); }
   if(!$('result').classList.contains('fs')) applyMat(); // 再合成後もボーダー維持
-  updateSizeLock(); updateEffectLock();
+  updateSizeLock(); updateEffectLock(); updateAdjustReadout();
 }
 
 // --- スチール用エフェクト（ノーマル / ノイズ / 8bit / 16bit） ---
@@ -1013,16 +988,9 @@ function updateSizeLock(){
   }
 }
 function updateEffectLock(){
-  const es=$('effectSel'); if(es) es.disabled=(mode==='glitch');
   const g=(mode==='glitch');
   document.querySelectorAll('.glitchonly').forEach(el=>el.style.display=g?'flex':'none');
   document.querySelectorAll('.stillonly').forEach(el=>el.style.display=g?'none':'flex');
-}
-
-function fillBlendSelect(){
-  const sel=$('blendSel'); if(sel.options.length) return;
-  const r=document.createElement('option'); r.value='__random'; r.textContent='Random'; r.selected=true; sel.appendChild(r);
-  BLENDS.forEach(([v,jp])=>{const o=document.createElement('option');o.value=v;o.textContent=jp;sel.appendChild(o);});
 }
 
 function showEdit(){
@@ -1030,7 +998,7 @@ function showEdit(){
   $('editView').style.display='flex';
   $('result').style.display='block';
   $('result').classList.remove('fs');
-  fillBlendSelect();
+  randomizeStyle();      // エフェクトも毎回自動で割り当て
   shufflePhotos();
   assignMergeJitter();
   compose();
@@ -1083,13 +1051,11 @@ document.addEventListener('click',(e)=>{
   if(retakeArmed && !e.target.closest('#backBtn')) disarmRetake();
 });
 
+const FX_LIST=['normal','noise','8bit','16bit','scanlines','halftone','invert','rgbshift','bloom','copier','silkscreen'];
 function randomizeStyle(){
-  const FX=['normal','noise','8bit','16bit','scanlines','halftone','invert','rgbshift','bloom','copier','silkscreen'];
-  effect=FX[(Math.random()*FX.length)|0];
+  effect=FX_LIST[(Math.random()*FX_LIST.length)|0];
   glitchSeed=(Math.random()*1000)|0;     // グリッチ時のパターン
   fxScale=0.6+Math.random()*1.6;
-  const bs=$('blendSel'); if(bs && bs.options.length) bs.value='__random';
-  const es=$('effectSel'); if(es && !es.disabled) es.value=effect;
 }
 $('rerollAllBtn').onclick=()=>{
   photos.forEach(p=>{
@@ -1103,14 +1069,7 @@ $('rerollAllBtn').onclick=()=>{
   assignMergeJitter();
   compose();
 };
-$('blendSel').onchange=e=>{
-  const v=e.target.value;
-  if(v==='__random') photos.forEach(p=>p.blend=randBlend());
-  else photos.forEach(p=>p.blend=v);
-  compose();
-};
-$('effectSel').onchange=e=>{ effect=e.target.value; compose(); };
-let matColor='none';   // 作品の周囲（マット）: none / #000 / #fff
+let matColor='#fff';   // 作品の周囲（マット）: #fff / #000 / none（白が既定）
 function applyMat(){
   const r=$('result'), st=$('editStage');
   if(matColor==='none'){ r.classList.remove('mat'); r.style.background=''; st.style.background=''; }
@@ -1122,28 +1081,23 @@ $('matToggle').onclick=e=>{
   [...$('matToggle').children].forEach(x=>x.classList.toggle('active',x===b));
   applyMat();
 };
-function setSatToggleUI(){
-  const t=$('satToggle'); if(!t) return;
-  [...t.children].forEach(x=>x.classList.toggle('active', +x.dataset.sat===satLevel));
+const EFFECT_LABELS={normal:'Normal',noise:'Noise','8bit':'8bit','16bit':'16bit',
+  scanlines:'Scanlines',halftone:'Halftone',invert:'Invert',rgbshift:'RGB Shift',
+  bloom:'Bloom',copier:'Copier',silkscreen:'Silkscreen'};
+const BLEND_LABELS=Object.fromEntries(BLENDS); // 値→表示名
+function blendReadout(){
+  if(!photos.length) return '—';
+  // 1枚目は土台（Normal）。2枚目以降に割り当てたブレンドを表示
+  const arr=photos.slice(1).map(p=>BLEND_LABELS[p.blend]||p.blend);
+  return arr.length ? arr.join(' / ') : 'Normal';
 }
-$('satToggle').onclick=e=>{
-  const b=e.target.closest('button'); if(!b) return;
-  satLevel=+b.dataset.sat;
-  punchS=SAT_LEVELS[satLevel];
-  setSatToggleUI();
-  compose();
-};
-function setToneToggleUI(){
-  const t=$('toneToggle'); if(!t) return;
-  [...t.children].forEach(x=>x.classList.toggle('active', +x.dataset.tone===toneIdx));
+function updateAdjustReadout(){
+  const set=(id,v)=>{ const e=$(id); if(e) e.textContent=v; };
+  set('blendVal', blendReadout());
+  set('effectVal', EFFECT_LABELS[effect]||effect);
+  set('satVal', (satLevel+1)+' / 5');
+  set('toneVal', toneIdx===0 ? 'Off' : (toneIdx+1)+' / 5');
 }
-$('toneToggle').onclick=e=>{
-  const b=e.target.closest('button'); if(!b) return;
-  toneIdx=+b.dataset.tone;
-  toneLift=TONE_LEVELS[toneIdx];
-  setToneToggleUI();
-  compose();
-};
 $('result').addEventListener('click',()=>{
   const r=$('result'), back=$('fsBack');
   const fs=r.classList.toggle('fs');
@@ -1269,7 +1223,7 @@ function addGifComment(bytes, text){
 // iOSは共有シート→「写真に保存」で保存。非対応環境はダウンロードに切替
 async function saveOrShare(blob, filename, fallbackMsg){
   try{
-    const file=new File([blob], filename, {type:blob.type});
+    const file=new File([blob], filename, {type:blob.type, lastModified:Date.now()});
     if(navigator.canShare && navigator.canShare({files:[file]})){
       await navigator.share({files:[file]});
       return;
