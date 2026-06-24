@@ -364,7 +364,7 @@ The application is provided "as is", without warranty of any kind, express or im
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
 <script>
-const APP_VERSION='v4.5';
+const APP_VERSION='v4.6';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
@@ -693,11 +693,14 @@ function renderStack(){
     } else {
       const mag=(p.jmag||0)*maxShift;
       const dx=Math.cos(p.jang||0)*mag, dy=Math.sin(p.jang||0)*mag;
-      const sc=p.jscale||1, fx=p.jflip?-1:1;
+      const rot=p.jrot||0, fx=p.jflip?-1:1;
+      const asp=Math.max(W/H, H/W);
+      const cover=Math.abs(Math.cos(rot))+asp*Math.abs(Math.sin(rot)); // 回転しても4辺が出ない最小倍率
+      const sc=Math.max(p.jscale||1, cover);       // 縮小しても最低は全面被覆
       ctx.save();
       ctx.translate(W/2+dx, H/2+dy);              // ズレ
-      ctx.rotate(p.jrot||0);                       // 回転
-      ctx.scale(sc*fx, sc);                        // スケール＋左右反転
+      ctx.rotate(rot);                             // 回転
+      ctx.scale(sc*fx, sc);                        // 被覆を保証する拡大＋左右反転
       ctx.drawImage(p.tinted, -W/2, -H/2, W, H);
       ctx.restore();
     }
