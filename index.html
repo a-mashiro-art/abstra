@@ -364,7 +364,7 @@ The application is provided "as is", without warranty of any kind, express or im
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
 <script>
-const APP_VERSION='v4.0';
+const APP_VERSION='v4.3';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
@@ -681,7 +681,12 @@ function renderStack(){
     const bl=(p.jblur||0)*maxBlur;
     ctx.filter = bl>0.3 ? ('blur('+bl+'px)') : 'none';
     if(i===0){
-      ctx.drawImage(p.tinted,0,0,W,H);            // 1枚目は土台（変形なし）
+      const sc=Math.max(1,p.jscale||1), fx=p.jflip?-1:1;  // 土台もランダムズーム（≥1で全面被覆）
+      ctx.save();
+      ctx.translate(W/2, H/2);
+      ctx.scale(sc*fx, sc);
+      ctx.drawImage(p.tinted, -W/2, -H/2, W, H);
+      ctx.restore();
     } else {
       const mag=(p.jmag||0)*maxShift;
       const dx=Math.cos(p.jang||0)*mag, dy=Math.sin(p.jang||0)*mag;
@@ -722,12 +727,12 @@ function assignMergeJitter(){
   toneIdx=(Math.random()*TONE_LEVELS.length)|0;     // トーンリフトをランダム
   toneLift=TONE_LEVELS[toneIdx];
   photos.forEach((p,i)=>{
-    if(i===0){ p.jmag=0;p.jang=0;p.jblur=0;p.jrot=0;p.jflip=false;p.jscale=1; return; }
+    if(i===0){ p.jmag=0;p.jang=0;p.jblur=0;p.jrot=0;p.jflip=Math.random()<0.5;p.jscale=1.0+Math.random()*1.4; return; } // 土台 1.0〜2.4倍
     p.jang=0; p.jmag=0;                 // ズレなし
     p.jblur=0.5+Math.random()*0.5;      // ブレ 0.5〜1.0（短辺最大1.5%）
     p.jrot=(Math.random()-0.5)*Math.PI; // 回転 ±約90°
     p.jflip=Math.random()<0.5;          // 左右反転
-    p.jscale=1.5+Math.random()*2.5;     // スケール 1.5〜4倍
+    p.jscale=0.6+Math.random()*3.8;     // スケール 0.6〜4.4倍（よりランダム）
   });
 }
 
@@ -782,6 +787,28 @@ function vivify(c, targetL){
   const L=targetL, q=L<0.5?L*(1+s):L+s-L*s, p=2*L-q;
   const hue=(p,q,t)=>{ if(t<0)t++; if(t>1)t--; if(t<1/6)return p+(q-p)*6*t; if(t<1/2)return q; if(t<2/3)return p+(q-p)*(2/3-t)*6; return p; };
   return [Math.round(hue(p,q,h+1/3)*255),Math.round(hue(p,q,h)*255),Math.round(hue(p,q,h-1/3)*255)];
+}
+
+// 単一チャンネル配列の分離型ボックスブラー（鉛筆スケッチ用）
+function boxBlur1(arr,w,h,r){
+  const win=r*2+1, tmp=new Float32Array(w*h), out=new Float32Array(w*h);
+  for(let y=0;y<h;y++){
+    let acc=0;
+    for(let x=-r;x<=r;x++){ acc+=arr[y*w+Math.min(w-1,Math.max(0,x))]; }
+    for(let x=0;x<w;x++){
+      tmp[y*w+x]=acc/win;
+      acc+=arr[y*w+Math.min(w-1,x+r+1)]-arr[y*w+Math.max(0,x-r)];
+    }
+  }
+  for(let x=0;x<w;x++){
+    let acc=0;
+    for(let y=-r;y<=r;y++){ acc+=tmp[Math.min(h-1,Math.max(0,y))*w+x]; }
+    for(let y=0;y<h;y++){
+      out[y*w+x]=acc/win;
+      acc+=tmp[Math.min(h-1,y+r+1)*w+x]-tmp[Math.max(0,y-r)*w+x];
+    }
+  }
+  return out;
 }
 
 function applyEffect(){
@@ -933,6 +960,94 @@ function applyEffect(){
           for(let k=0;k<len;k++){ const j=(y*w+st+k)*4, q=arr[k]; dd[j]=q[1];dd[j+1]=q[2];dd[j+2]=q[3];dd[j+3]=q[4]; }
         }
       }
+    }
+    octx.putImageData(img,0,0);
+  }
+  else if(effect==='pencil' || effect==='coloredpencil'){
+    // 鉛筆／色鉛筆：カラードッジ法でスケッチ化（紙＋黒鉛、または線に作品色を残す）
+    const img=octx.getImageData(0,0,w,h), d=img.data, n=w*h;
+    const gray=new Float32Array(n), inv=new Float32Array(n);
+    for(let i=0;i<n;i++){ const j=i*4, g=0.299*d[j]+0.587*d[j+1]+0.114*d[j+2]; gray[i]=g; inv[i]=255-g; }
+    const r=Math.max(2, Math.round(Math.min(w,h)/120));
+    const binv=boxBlur1(inv,w,h,r);
+    const paper=[244,241,232], graphite=[34,33,32];
+    for(let i=0;i<n;i++){
+      let s=gray[i]*255/Math.max(1,255-binv[i]); if(s>255)s=255;       // カラードッジ
+      s=Math.max(0,Math.min(255,(s-128)*1.15+128));                    // 軽いコントラスト
+      const t=s/255, j=i*4, gn=(Math.random()-0.5)*16;                 // 紙のざらつき
+      if(effect==='pencil'){
+        d[j]  =Math.max(0,Math.min(255, graphite[0]+(paper[0]-graphite[0])*t+gn));
+        d[j+1]=Math.max(0,Math.min(255, graphite[1]+(paper[1]-graphite[1])*t+gn));
+        d[j+2]=Math.max(0,Math.min(255, graphite[2]+(paper[2]-graphite[2])*t+gn));
+      } else {                                                         // 線に作品色を残す
+        const k=(1-t)*0.92;
+        d[j]  =Math.max(0,Math.min(255, paper[0]+(d[j]  -paper[0])*k+gn));
+        d[j+1]=Math.max(0,Math.min(255, paper[1]+(d[j+1]-paper[1])*k+gn));
+        d[j+2]=Math.max(0,Math.min(255, paper[2]+(d[j+2]-paper[2])*k+gn));
+      }
+    }
+    octx.putImageData(img,0,0);
+  }
+  else if(effect==='watercolor'){
+    // 水彩：チャンネルごとに滲ませ、ウォッシュを平坦化、エッジに顔料を溜め、紙へ淡く透過
+    const img=octx.getImageData(0,0,w,h), d=img.data, n=w*h;
+    const R=Math.max(2, Math.round(Math.min(w,h)/200));
+    const c0=new Float32Array(n),c1=new Float32Array(n),c2=new Float32Array(n);
+    for(let i=0;i<n;i++){ const j=i*4; c0[i]=d[j];c1[i]=d[j+1];c2[i]=d[j+2]; }
+    const b0=boxBlur1(c0,w,h,R), b1=boxBlur1(c1,w,h,R), b2=boxBlur1(c2,w,h,R);
+    const Q=6, paper=[245,242,233];
+    const lumAt=i=>0.299*b0[i]+0.587*b1[i]+0.114*b2[i];
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+      const i=y*w+x, j=i*4;
+      let r=Math.round(b0[i]/255*Q)/Q*255, g=Math.round(b1[i]/255*Q)/Q*255, bb=Math.round(b2[i]/255*Q)/Q*255;
+      const lx=(x<w-1?lumAt(i+1):lumAt(i))-(x>0?lumAt(i-1):lumAt(i));
+      const ly=(y<h-1?lumAt(i+w):lumAt(i))-(y>0?lumAt(i-w):lumAt(i));
+      const darken=1-Math.min(1,Math.hypot(lx,ly)/90)*0.45;       // 顔料のたまり
+      const a=0.85, gn=(Math.random()-0.5)*10;                    // 紙のムラ
+      r=paper[0]+(r*darken-paper[0])*a+gn;
+      g=paper[1]+(g*darken-paper[1])*a+gn;
+      bb=paper[2]+(bb*darken-paper[2])*a+gn;
+      d[j]=Math.max(0,Math.min(255,r)); d[j+1]=Math.max(0,Math.min(255,g)); d[j+2]=Math.max(0,Math.min(255,bb));
+    }
+    octx.putImageData(img,0,0);
+  }
+  else if(effect==='spraypaint'){
+    // ラッカースプレー：軽く滲ませた上にオーバースプレー粒子と滴を散らす
+    const img=octx.getImageData(0,0,w,h), d=img.data, n=w*h;
+    const R=Math.max(1, Math.round(Math.min(w,h)/320));
+    const c0=new Float32Array(n),c1=new Float32Array(n),c2=new Float32Array(n);
+    for(let i=0;i<n;i++){ const j=i*4; c0[i]=d[j];c1[i]=d[j+1];c2[i]=d[j+2]; }
+    const b0=boxBlur1(c0,w,h,R), b1=boxBlur1(c1,w,h,R), b2=boxBlur1(c2,w,h,R);
+    for(let i=0;i<n;i++){
+      const j=i*4; let r=b0[i],g=b1[i],bb=b2[i];
+      const cover=1-(0.299*r+0.587*g+0.114*bb)/255;               // 暗いほど塗りが濃い
+      const gn=(Math.random()-0.5)*26; r+=gn; g+=gn; bb+=gn;       // オーバースプレー
+      if(Math.random()<0.06+cover*0.10){ const dk=20+Math.random()*45; r-=dk; g-=dk; bb-=dk; } // 濃い滴
+      if(Math.random()<0.015){ const lt=20+Math.random()*40; r+=lt; g+=lt; bb+=lt; }            // 明るいミスト
+      d[j]=Math.max(0,Math.min(255,r)); d[j+1]=Math.max(0,Math.min(255,g)); d[j+2]=Math.max(0,Math.min(255,bb));
+    }
+    octx.putImageData(img,0,0);
+  }
+  else if(effect==='neon'){
+    // ネオン：エッジを作品色で発光させ、暗い地に光らせる（グロー付き）
+    const img=octx.getImageData(0,0,w,h), d=img.data, n=w*h;
+    const gray=new Float32Array(n);
+    for(let i=0;i<n;i++){ const j=i*4; gray[i]=0.299*d[j]+0.587*d[j+1]+0.114*d[j+2]; }
+    const eR=new Float32Array(n), eG=new Float32Array(n), eB=new Float32Array(n);
+    const thr=26;
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+      const i=y*w+x;
+      const xl=x>0?i-1:i, xr=x<w-1?i+1:i, yu=y>0?i-w:i, yd=y<h-1?i+w:i;
+      let e=Math.hypot(gray[xr]-gray[xl], gray[yd]-gray[yu])/thr; if(e>1)e=1;
+      if(e>0.04){ const j=i*4, ne=vivify([d[j],d[j+1],d[j+2]],0.62); eR[i]=ne[0]*e; eG[i]=ne[1]*e; eB[i]=ne[2]*e; }
+    }
+    const R=Math.max(2,Math.round(Math.min(w,h)/200));
+    const gR=boxBlur1(eR,w,h,R), gG=boxBlur1(eG,w,h,R), gB=boxBlur1(eB,w,h,R);
+    for(let i=0;i<n;i++){
+      const j=i*4;
+      d[j]  =Math.max(0,Math.min(255, d[j]  *0.10 + eR[i] + gR[i]*0.7)); // 暗い地＋発光＋グロー
+      d[j+1]=Math.max(0,Math.min(255, d[j+1]*0.10 + eG[i] + gG[i]*0.7));
+      d[j+2]=Math.max(0,Math.min(255, d[j+2]*0.10 + eB[i] + gB[i]*0.7));
     }
     octx.putImageData(img,0,0);
   }
@@ -1102,7 +1217,7 @@ document.addEventListener('click',(e)=>{
   if(retakeArmed && !e.target.closest('#backBtn')) disarmRetake();
 });
 
-const FX_LIST=['normal','noise','8bit','16bit','invert','rgbshift','bloom','copier','silkscreen','risograph','dither','pixelsort'];
+const FX_LIST=['normal','noise','8bit','16bit','invert','rgbshift','bloom','copier','silkscreen','risograph','dither','pixelsort','pencil','coloredpencil','watercolor','spraypaint','neon'];
 function randomizeStyle(){
   effect=FX_LIST[(Math.random()*FX_LIST.length)|0];
   glitchSeed=(Math.random()*1000)|0;     // グリッチ時のパターン
@@ -1135,7 +1250,8 @@ $('matToggle').onclick=e=>{
 const EFFECT_LABELS={normal:'Normal',noise:'Noise','8bit':'8bit','16bit':'16bit',
   invert:'Invert',rgbshift:'RGB Shift',
   bloom:'Bloom',copier:'Copier',silkscreen:'Silkscreen',
-  risograph:'Risograph',dither:'Dither',pixelsort:'Pixel Sort'};
+  risograph:'Risograph',dither:'Dither',pixelsort:'Pixel Sort',
+  pencil:'Pencil',coloredpencil:'Colored Pencil',watercolor:'Watercolor',spraypaint:'Lacquer Spray',neon:'Neon'};
 const BLEND_LABELS=Object.fromEntries(BLENDS); // 値→表示名
 function blendReadout(){
   if(!photos.length) return '—';
