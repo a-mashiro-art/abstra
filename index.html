@@ -364,7 +364,7 @@ The application is provided "as is", without warranty of any kind, express or im
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
 <script>
-const APP_VERSION='v4.3';
+const APP_VERSION='v4.5';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
@@ -453,13 +453,12 @@ function pickColors(src){
 }
 const randLevels=()=>10+(Math.random()*7|0); // 10〜16段
 
-// パレット（複数色）を輝度t(0..1)で補間
+// パレット（複数色）を輝度t(0..1)で選択（補間なし＝フラットな色面）
 function paletteColor(colors, t){
   const m=colors.length;
   if(m<=1) return colors[0];
-  const x=t*(m-1); let i=Math.floor(x); if(i>m-2) i=m-2; const f=x-i;
-  const a=colors[i], b=colors[i+1];
-  return { r:a.r+(b.r-a.r)*f, g:a.g+(b.g-a.g)*f, b:a.b+(b.b-a.b)*f };
+  let i=Math.round(t*(m-1)); if(i<0)i=0; if(i>m-1)i=m-1;
+  return colors[i];
 }
 
 // --- 大ぼかし → ランダム角度モーションブレ → ポスタライズ → 多色マッピング ---
@@ -681,10 +680,14 @@ function renderStack(){
     const bl=(p.jblur||0)*maxBlur;
     ctx.filter = bl>0.3 ? ('blur('+bl+'px)') : 'none';
     if(i===0){
-      const sc=Math.max(1,p.jscale||1), fx=p.jflip?-1:1;  // 土台もランダムズーム（≥1で全面被覆）
+      const rot=p.jrot||0, fx=p.jflip?-1:1;
+      const asp=Math.max(W/H, H/W);
+      const cover=Math.abs(Math.cos(rot))+asp*Math.abs(Math.sin(rot)); // 回転しても4辺が出ない最小倍率
+      const sc=Math.max(p.jscale||1, cover);
       ctx.save();
       ctx.translate(W/2, H/2);
-      ctx.scale(sc*fx, sc);
+      ctx.rotate(rot);                            // 土台の回転
+      ctx.scale(sc*fx, sc);                       // 被覆を保証する拡大＋左右反転
       ctx.drawImage(p.tinted, -W/2, -H/2, W, H);
       ctx.restore();
     } else {
@@ -727,7 +730,7 @@ function assignMergeJitter(){
   toneIdx=(Math.random()*TONE_LEVELS.length)|0;     // トーンリフトをランダム
   toneLift=TONE_LEVELS[toneIdx];
   photos.forEach((p,i)=>{
-    if(i===0){ p.jmag=0;p.jang=0;p.jblur=0;p.jrot=0;p.jflip=Math.random()<0.5;p.jscale=1.0+Math.random()*1.4; return; } // 土台 1.0〜2.4倍
+    if(i===0){ p.jmag=0;p.jang=0;p.jblur=0;p.jrot=(Math.random()-0.5)*0.9;p.jflip=Math.random()<0.5;p.jscale=1.0+Math.random()*0.8; return; } // 土台 回転±約26°・ズーム1.0〜1.8倍
     p.jang=0; p.jmag=0;                 // ズレなし
     p.jblur=0.5+Math.random()*0.5;      // ブレ 0.5〜1.0（短辺最大1.5%）
     p.jrot=(Math.random()-0.5)*Math.PI; // 回転 ±約90°
