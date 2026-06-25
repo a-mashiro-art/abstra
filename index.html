@@ -364,7 +364,7 @@ The application is provided "as is", without warranty of any kind, express or im
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
 <script>
-const APP_VERSION='v9.2';
+const APP_VERSION='v9.6';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
@@ -1261,6 +1261,11 @@ function applyEffect(){
     const dcx=dc.getContext('2d'); dcx.imageSmoothingEnabled=true; dcx.drawImage(composed,0,0,dsW,dsH);
     const ds=dcx.getImageData(0,0,dsW,dsH).data;
     octx.fillStyle='rgb(248,247,243)'; octx.fillRect(0,0,w,h);
+    octx.save();                                            // 白い部分を塗り色の5〜10%でうっすら埋める
+    octx.globalAlpha=0.1+Math.random()*0.2;
+    octx.imageSmoothingEnabled=true;
+    octx.drawImage(dc,0,0,w,h);
+    octx.restore();
     octx.lineCap='round'; octx.lineJoin='round';
     const jt=m=>(Math.random()-0.5)*m;
     const sampleCol=(px,py,L)=>{
@@ -1268,7 +1273,7 @@ function applyEffect(){
       const k=(sy*dsW+sx)*4, v=vivify([ds[k],ds[k+1],ds[k+2]], L);
       return [v[0]+jt(34), v[1]+jt(34), v[2]+jt(34)];          // 色ゆらぎ（写真から離す）
     };
-    const N=Math.round(w*h/(f*f)*1500);
+    const N=Math.round(w*h/(f*f)*2600);
     for(let s=0;s<N;s++){
       const px=-f*0.05+Math.random()*(w+f*0.1), py=-f*0.05+Math.random()*(h+f*0.1);
       const ox=jt(f*0.05), oy=jt(f*0.05);                      // 色サンプル位置をずらし写真構造を崩す
@@ -1474,7 +1479,7 @@ document.addEventListener('click',(e)=>{
   if(retakeArmed && !e.target.closest('#backBtn')) disarmRetake();
 });
 
-const FX_LIST=['normal','noise','8bit','16bit','invert','rgbshift','bloom','copier','silkscreen','risograph','dither','pixelsort','roughpencil','watercolor','spraypaint','neon','gestural'];
+const FX_LIST=['normal','noise','8bit','16bit','invert','rgbshift','bloom','copier','silkscreen','risograph','dither','pixelsort','roughpencil','spraypaint','neon','gestural'];
 function randomizeStyle(){
   effect=FX_LIST[(Math.random()*FX_LIST.length)|0];
   glitchSeed=(Math.random()*1000)|0;     // グリッチ時のパターン
@@ -1508,7 +1513,7 @@ const EFFECT_LABELS={normal:'Normal',noise:'Noise','8bit':'8bit','16bit':'16bit'
   invert:'Invert',rgbshift:'RGB Shift',
   bloom:'Bloom',copier:'Copier',silkscreen:'Silkscreen',
   risograph:'Risograph',dither:'Dither',pixelsort:'Pixel Sort',
-  roughpencil:'Rough Pencil',watercolor:'Watercolor',spraypaint:'Lacquer Spray',neon:'Neon',gestural:'Gestural'};
+  roughpencil:'Rough Pencil',spraypaint:'Lacquer Spray',neon:'Neon',gestural:'Gestural'};
 const BLEND_LABELS=Object.fromEntries(BLENDS); // 値→表示名
 function blendReadout(){
   if(!photos.length) return '—';
