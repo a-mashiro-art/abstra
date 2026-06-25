@@ -364,7 +364,7 @@ The application is provided "as is", without warranty of any kind, express or im
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
 <script>
-const APP_VERSION='v8.4';
+const APP_VERSION='v9.0';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
@@ -763,7 +763,9 @@ function shufflePhotos(){
 }
 
 function compose(){
-  renderStack();
+  const b=photos[0]&&photos[0].src;                       // プレビューは長辺1600pxに制限（重いエフェクトの高速化）
+  const cap=b ? Math.min(1600, Math.max(b.width,b.height)) : 0;
+  renderStack(cap||undefined);
   if(mode==='glitch'){ startGlitch(); }
   else { stopGlitch(); applyEffect(); }
   if(!$('result').classList.contains('fs')) applyMat(); // 再合成後もボーダー維持
@@ -1105,53 +1107,35 @@ function applyEffect(){
     const c0=new Float32Array(n),c1=new Float32Array(n),c2=new Float32Array(n);
     for(let i=0;i<n;i++){ const j=i*4; c0[i]=d[j];c1[i]=d[j+1];c2[i]=d[j+2]; }
     const f=Math.min(w,h);
-    const Rp=Math.max(3, Math.round(f/110));
-    const blurN=a=>{ let t=a; for(let k=0;k<3;k++) t=boxBlur1(t,w,h,Rp); return t; }; // 丸い柔らかな下地
+    const Rp=Math.max(4, Math.round(f/80));
+    const blurN=a=>{ let t=a; for(let k=0;k<5;k++) t=boxBlur1(t,w,h,Rp); return t; }; // 5回＝丸い大滲み
     const b0=blurN(c0), b1=blurN(c1), b2=blurN(c2);
-    const lum=new Float32Array(n);
-    for(let i=0;i<n;i++){ lum[i]=0.299*b0[i]+0.587*b1[i]+0.114*b2[i]; }
-    const amp=f*0.045, gS=Math.max(1.5,f/600), pt=Math.max(1.3,f/1200);
+    const amp=f*0.11, gS=Math.max(1.5,f/600), pt=Math.max(1.3,f/1200); // うねり大＝形を溶かして混ぜる
     const paper=[250,249,245];                            // 明るい紙白（光は紙から）
-    const eScale=Math.max(6, f*0.02);
     for(let y=0;y<h;y++)for(let x=0;x<w;x++){
       const i=y*w+x, j=i*4;
-      // wet-on-wet：有機的な2オクターブのうねりで隣の色を引き込み柔らかく滲む
-      const wx=((vnoise(x/(f*0.12)+1,y/(f*0.12)+1)-0.5)+(vnoise(x/(f*0.04)+7,y/(f*0.04)+7)-0.5)*0.6)*amp;
-      const wy=((vnoise(x/(f*0.12)+9,y/(f*0.12)+9)-0.5)+(vnoise(x/(f*0.04)+3,y/(f*0.04)+3)-0.5)*0.6)*amp;
+      // wet-on-wet：有機的な3オクターブの大きなうねりで形・輪郭を溶かして混ぜる
+      const wx=((vnoise(x/(f*0.16)+1,y/(f*0.16)+1)-0.5)+(vnoise(x/(f*0.06)+7,y/(f*0.06)+7)-0.5)*0.6+(vnoise(x/(f*0.02)+5,y/(f*0.02)+5)-0.5)*0.3)*amp;
+      const wy=((vnoise(x/(f*0.16)+9,y/(f*0.16)+9)-0.5)+(vnoise(x/(f*0.06)+3,y/(f*0.06)+3)-0.5)*0.6+(vnoise(x/(f*0.02)+8,y/(f*0.02)+8)-0.5)*0.3)*amp;
       let sx=Math.round(x+wx), sy=Math.round(y+wy);
       sx=sx<0?0:sx>=w?w-1:sx; sy=sy<0?0:sy>=h?h-1:sy;
       const si=sy*w+sx;
       let r=b0[si], g=b1[si], bb=b2[si];
-      // 顔料の濃淡：重なりの水たまり＋粒状（グラニュレーション）
-      const pool=vnoise(x/(f*0.06)+2, y/(f*0.06)+2);
+      const mean=(r+g+bb)/3;
+      r=mean+(r-mean)*1.45; g=mean+(g-mean)*1.45; bb=mean+(bb-mean)*1.45; // 鮮やかさ（彩度）をオリジナル並みに
+      r=128+(r-128)*1.18; g=128+(g-128)*1.18; bb=128+(bb-128)*1.18;       // 濃淡（コントラスト）を強く
+      // 顔料の濃淡：細かいムラ＋粒状（大きな塊にならないよう細かく）
+      const pool=vnoise(x/(f*0.022)+2, y/(f*0.022)+2);
       const gran=vnoise(x/gS, y/gS);
-      let dens=Math.min(1,(0.5+0.32*pool)*(0.84+0.32*gran));
-      // 縁の溜まり：境界に顔料がたまり少し濃くなる（ノイズで途切れさせ線にしない）
-      const xl=x>0?i-1:i, xr=x<w-1?i+1:i, yu=y>0?i-w:i, yd=y<h-1?i+w:i;
-      let edge=Math.hypot(lum[xr]-lum[xl], lum[yd]-lum[yu])/eScale; if(edge>1)edge=1;
-      edge*=(0.25+0.75*vnoise(x/(f*0.025)+4, y/(f*0.025)+4));   // 有機的に途切れる
-      dens=Math.min(1, dens*(1+edge*0.45));
-      // 水たまりの抜け（バックラン）：所々が明るく抜ける
-      const back=vnoise(x/(f*0.1)+11, y/(f*0.1)+11);
-      if(back>0.82) dens*=0.55;                                 // まれに明るい抜け
+      let dens=Math.min(1,(0.72+0.18*pool)*(0.88+0.22*gran));   // 紙への薄まりを減らし発色を保つ
       const pl=1-0.045*vnoise(x/pt+5, y/pt+5);                  // 目の細かい紙
       const gn=(Math.random()-0.5)*6;
       let R=(paper[0]+(r-paper[0])*dens+gn)*pl;
       let G=(paper[1]+(g-paper[1])*dens+gn)*pl;
       let B=(paper[2]+(bb-paper[2])*dens+gn)*pl;
-      d[j]  =Math.max(0,Math.min(255, R*0.985+255*0.015));      // 透明感のわずかな持ち上げ
-      d[j+1]=Math.max(0,Math.min(255, G*0.985+255*0.015));
-      d[j+2]=Math.max(0,Math.min(255, B*0.985+255*0.015));
-    }
-    // --- 追加表現：縦に流れる滴り（水・絵具）と散らばる斑点 ---
-    const nDrip=7+(Math.random()*12|0);
-    for(let t=0;t<nDrip;t++){
-      const x0=(Math.random()*w)|0, y0=(Math.random()*h*0.55)|0, di=(y0*w+x0)*4;
-      const L=f*(0.06+Math.random()*0.5);                       // 長さランダム
-      const bw=Math.max(1.2, f*0.0022*(0.6+Math.random()*1.3));
-      const col=(Math.random()<0.3) ? [252,251,248]            // 水/白の明るい流れ
-                                     : [d[di]*0.9, d[di+1]*0.9, d[di+2]*0.9]; // 局所色を少し濃く
-      drawDrip(d,w,h,x0,y0,L,bw,col);
+      d[j]  =Math.max(0,Math.min(255, R));                      // 持ち上げ無し＝濃淡を強く
+      d[j+1]=Math.max(0,Math.min(255, G));
+      d[j+2]=Math.max(0,Math.min(255, B));
     }
     const nDot=Math.round(w*h/(f*f)*22);                        // 顔料の飛沫（斑点）
     for(let t=0;t<nDot;t++){
@@ -1263,47 +1247,59 @@ function applyEffect(){
     octx.putImageData(img,0,0);
   }
   else if(effect==='gestural'){
-    // ゲスチュラル抽象（抽象表現主義風）：白い地に多方向の筆致を全画面に重ね、純色とドリップ
-    const src=octx.getImageData(0,0,w,h).data;          // 色抽出用に元画像を保持
+    // ゲスチュラル抽象：白地に多方向の筆致を全画面に重ねる。写真は縮小サンプリングで崩し、毛筆の筋と色ゆらぎで絵具感を出す
     const f=Math.min(w,h);
-    octx.fillStyle='rgb(248,247,243)';                  // 生成りの白い地
-    octx.fillRect(0,0,w,h);
+    // 写真を崩す：1/10に縮小サンプリング（細部を消し色面だけ残す）
+    const dsW=Math.max(2,Math.round(w/10)), dsH=Math.max(2,Math.round(h/10));
+    const dc=document.createElement('canvas'); dc.width=dsW; dc.height=dsH;
+    const dcx=dc.getContext('2d'); dcx.imageSmoothingEnabled=true; dcx.drawImage(composed,0,0,dsW,dsH);
+    const ds=dcx.getImageData(0,0,dsW,dsH).data;
+    octx.fillStyle='rgb(248,247,243)'; octx.fillRect(0,0,w,h);
     octx.lineCap='round'; octx.lineJoin='round';
+    const jt=m=>(Math.random()-0.5)*m;
     const sampleCol=(px,py,L)=>{
-      let x=px|0,y=py|0; x=x<0?0:x>=w?w-1:x; y=y<0?0:y>=h?h-1:y;
-      const k=(y*w+x)*4; return vivify([src[k],src[k+1],src[k+2]], L);   // 純度・明度を上げた色
+      let sx=(px/w*dsW)|0, sy=(py/h*dsH)|0; sx=sx<0?0:sx>=dsW?dsW-1:sx; sy=sy<0?0:sy>=dsH?dsH-1:sy;
+      const k=(sy*dsW+sx)*4, v=vivify([ds[k],ds[k+1],ds[k+2]], L);
+      return [v[0]+jt(34), v[1]+jt(34), v[2]+jt(34)];          // 色ゆらぎ（写真から離す）
     };
-    const N=Math.round(w*h/(f*f)*2500);                 // ストローク数（白を減らすため高密度）
+    const N=Math.round(w*h/(f*f)*1500);
     for(let s=0;s<N;s++){
-      const px=-f*0.05+Math.random()*(w+f*0.1), py=-f*0.05+Math.random()*(h+f*0.1); // 画面全体（端ははみ出してよい）
-      const col=sampleCol(px,py, 0.46+Math.random()*0.2);
-      const longS=Math.random()<0.22;                   // 短いダブ多め・たまに長い筆
-      const len=longS ? f*(0.06+Math.random()*0.14) : f*(0.01+Math.random()*0.035);
+      const px=-f*0.05+Math.random()*(w+f*0.1), py=-f*0.05+Math.random()*(h+f*0.1);
+      const ox=jt(f*0.05), oy=jt(f*0.05);                      // 色サンプル位置をずらし写真構造を崩す
+      const col=sampleCol(px+ox,py+oy, 0.42+Math.random()*0.24);
+      const longS=Math.random()<0.24;                          // 短いダブ多め・たまに長い筆
+      const len=longS ? f*(0.07+Math.random()*0.16) : f*(0.012+Math.random()*0.04);
       const base=f*(longS?0.006:0.004)*(0.6+Math.random()*1.1);
-      const thick=Math.random()<0.5;                    // 細線と太線を混在
-      const wdt=Math.max(1, base*(thick?(2+Math.random()*4):(0.4+Math.random()*1.0)));
-      const ang=Math.random()*Math.PI*2;                // 多方向（格子状に絡む）
-      const dx=Math.cos(ang)*len, dy=Math.sin(ang)*len;
-      const bend=(Math.random()-0.5)*len*0.5;           // 軽い反り（ゲスチュラル）
-      const nx=-Math.sin(ang)*bend, ny=Math.cos(ang)*bend;
-      const a=0.55+Math.random()*0.4;                   // 重なりで深み
-      octx.strokeStyle='rgba('+(col[0]|0)+','+(col[1]|0)+','+(col[2]|0)+','+a.toFixed(2)+')';
-      octx.lineWidth=wdt;
-      octx.beginPath();
-      octx.moveTo(px-dx*0.5, py-dy*0.5);
-      octx.quadraticCurveTo(px+nx, py+ny, px+dx*0.5, py+dy*0.5);
-      octx.stroke();
+      const thick=Math.random()<0.5;                           // 細線と太線を混在
+      const wdt=Math.max(1.4, base*(thick?(2+Math.random()*4):(0.4+Math.random()*1.0)));
+      const ang=Math.random()*Math.PI*2;
+      const ux=Math.cos(ang), uy=Math.sin(ang), nx=-uy, ny=ux; // 進行方向と直交
+      const dx=ux*len, dy=uy*len, bend=(Math.random()-0.5)*len*0.5;
+      const cxp=px+nx*bend, cyp=py+ny*bend;                    // 制御点（反り）
+      const a0=0.5+Math.random()*0.4;
+      const nb=2+(Math.random()*3|0);                          // 毛筆の筋（2〜4本）
+      for(let b=0;b<nb;b++){
+        const off=((b+0.5)/nb-0.5)*wdt, jc=jt(24);             // 毛ごとの位置・色差
+        const r=col[0]+jc, g=col[1]+jc, bb=col[2]+jc;
+        const ba=a0*(0.55+Math.random()*0.5);
+        octx.strokeStyle='rgba('+(Math.max(0,Math.min(255,r))|0)+','+(Math.max(0,Math.min(255,g))|0)+','+(Math.max(0,Math.min(255,bb))|0)+','+ba.toFixed(2)+')';
+        octx.lineWidth=Math.max(1, wdt/nb*(0.8+Math.random()*0.7));
+        octx.beginPath();
+        octx.moveTo(px-dx*0.5+nx*off, py-dy*0.5+ny*off);
+        octx.quadraticCurveTo(cxp+nx*off, cyp+ny*off, px+dx*0.5+nx*off, py+dy*0.5+ny*off);
+        octx.stroke();
+      }
     }
     // ドリップ：画面各所から絵具が垂れる（偶然の痕跡）
     const nd=8+(Math.random()*14|0);
     for(let t=0;t<nd;t++){
       const px=Math.random()*w, py=Math.random()*h;
-      const col=sampleCol(px,py, 0.42+Math.random()*0.18);
+      const col=sampleCol(px,py, 0.4+Math.random()*0.18);
       const L=f*(0.05+Math.random()*0.35), wd=Math.max(1.5, f*0.003*(0.6+Math.random()));
-      octx.strokeStyle='rgba('+(col[0]|0)+','+(col[1]|0)+','+(col[2]|0)+',0.8)';
-      octx.lineWidth=wd;
+      const cs='rgba('+(Math.max(0,Math.min(255,col[0]))|0)+','+(Math.max(0,Math.min(255,col[1]))|0)+','+(Math.max(0,Math.min(255,col[2]))|0)+',';
+      octx.strokeStyle=cs+'0.8)'; octx.lineWidth=wd;
       octx.beginPath(); octx.moveTo(px,py); octx.lineTo(px+(Math.random()-0.5)*f*0.012, py+L); octx.stroke();
-      octx.fillStyle='rgba('+(col[0]|0)+','+(col[1]|0)+','+(col[2]|0)+',0.85)'; // 末端の涙状の溜まり
+      octx.fillStyle=cs+'0.85)';
       octx.beginPath(); octx.arc(px+(Math.random()-0.5)*f*0.012, py+L, wd*1.3, 0, Math.PI*2); octx.fill();
     }
   }
@@ -1472,7 +1468,7 @@ document.addEventListener('click',(e)=>{
   if(retakeArmed && !e.target.closest('#backBtn')) disarmRetake();
 });
 
-const FX_LIST=['normal','noise','8bit','16bit','invert','rgbshift','bloom','copier','silkscreen','risograph','dither','pixelsort','pencil','coloredpencil','roughpencil','watercolor','spraypaint','neon','gestural'];
+const FX_LIST=['normal','noise','8bit','16bit','invert','rgbshift','bloom','copier','silkscreen','risograph','dither','pixelsort','roughpencil','watercolor','spraypaint','neon','gestural'];
 function randomizeStyle(){
   effect=FX_LIST[(Math.random()*FX_LIST.length)|0];
   glitchSeed=(Math.random()*1000)|0;     // グリッチ時のパターン
@@ -1506,7 +1502,7 @@ const EFFECT_LABELS={normal:'Normal',noise:'Noise','8bit':'8bit','16bit':'16bit'
   invert:'Invert',rgbshift:'RGB Shift',
   bloom:'Bloom',copier:'Copier',silkscreen:'Silkscreen',
   risograph:'Risograph',dither:'Dither',pixelsort:'Pixel Sort',
-  pencil:'Pencil',coloredpencil:'Colored Pencil',roughpencil:'Rough Pencil',watercolor:'Watercolor',spraypaint:'Lacquer Spray',neon:'Neon',gestural:'Gestural'};
+  roughpencil:'Rough Pencil',watercolor:'Watercolor',spraypaint:'Lacquer Spray',neon:'Neon',gestural:'Gestural'};
 const BLEND_LABELS=Object.fromEntries(BLENDS); // 値→表示名
 function blendReadout(){
   if(!photos.length) return '—';
