@@ -364,7 +364,7 @@ The application is provided "as is", without warranty of any kind, express or im
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
 <script>
-const APP_VERSION='v10.4';
+const APP_VERSION='v11.8';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
@@ -446,27 +446,30 @@ function pickFromHist(hist){
   const k=hist.entries[0].key; return {r:(k>>16)&255,g:(k>>8)&255,b:k&255};
 }
 function pickColors(src){
-  const n=5+(Math.random()*12|0);   // 5〜16色（撮影画像の色に忠実）
+  const n=5+(Math.random()*11|0);   // 5〜15色（撮影画像の色に忠実）
   const hist=colorHistogram(src);
   const arr=[]; for(let i=0;i<n;i++) arr.push(pickFromHist(hist));
   return arr;
 }
-const randLevels=()=>10+(Math.random()*21|0); // 10〜30段
+const randLevels=()=>5+(Math.random()*11|0); // 5〜15段
 
-// パレット（複数色）を輝度t(0..1)で選択（補間なし＝フラットな色面）
-function paletteColor(colors, t){
+// パレット（複数色）を輝度t(0..1)で選択。interp=補間量（0=フラット最近傍, 1=線形補間）
+function paletteColor(colors, t, interp){
   const m=colors.length;
   if(m<=1) return colors[0];
-  let i=Math.round(t*(m-1)); if(i<0)i=0; if(i>m-1)i=m-1;
-  return colors[i];
+  let f=Math.max(0,Math.min(1,t))*(m-1);
+  let i=Math.floor(f); if(i>m-2)i=m-2; let fr=f-i;
+  fr=(1-interp)*Math.round(fr)+interp*fr;        // 補間量で最近傍↔線形をブレンド
+  const a=colors[i], b=colors[i+1];
+  return { r:a.r+(b.r-a.r)*fr, g:a.g+(b.g-a.g)*fr, b:a.b+(b.b-a.b)*fr };
 }
 
 // --- 大ぼかし → ランダム角度モーションブレ → ポスタライズ → 多色マッピング ---
 function treat(src, colors, levels){
   const w=src.width, h=src.height;
   const n=Math.max(2,levels|0);
-  const sfBlur=1+Math.random()*4;                     // ぼかし強度 1〜5
-  const sfMotion=1+Math.random()*4;                   // ブレ強度 1〜5（独立）
+  const sfBlur=0.3+Math.random()*2.7;                 // ぼかし強度 0.3〜3
+  const sfMotion=0.3+Math.random()*2.7;               // ブレ強度 0.3〜3（ランダム）
   const stepBlur=Math.max(1, Math.min(w,h)*0.004)*sfBlur;   // 1ステップ分のぼかし（5回でディテールを残さない）
   const blurSteps=5;
   const angle=Math.random()*Math.PI*2;
@@ -503,9 +506,9 @@ function treat(src, colors, levels){
   const d=img.data;
   for(let i=0;i<d.length;i+=4){
     const lum0=(0.299*d[i]+0.587*d[i+1]+0.114*d[i+2])/255; // 連続輝度
-    let lq=Math.pow(lum0,0.9);
-    lq=Math.round(lq*(n-1))/(n-1);                         // 量子化（色選択用）
-    const col=paletteColor(colors,lq);                    // フラット色（補間なし・陰影なし）
+    let lc=Math.pow(lum0,0.9);
+    let lqz=Math.round(lc*(n-1))/(n-1);                    // 量子化（5〜20段・陰影なし）
+    const col=paletteColor(colors,lqz,0);                 // 補間なし（フラットな色面）
     let r=col.r, g=col.g, b=col.b;
     if(gamp>0){ const nz=(Math.random()-0.5)*gamp; r+=nz; g+=nz; b+=nz; }
     d[i]=Math.max(0,Math.min(255,r)); d[i+1]=Math.max(0,Math.min(255,g)); d[i+2]=Math.max(0,Math.min(255,b)); d[i+3]=255;
@@ -659,8 +662,8 @@ function renderStrip(){
 const composed=document.createElement('canvas');
 let globalBlend='overlay'; // フォールバック用
 let punchC=1.16, punchS=1.3; // 仕上げのコントラスト/彩度（Mergeでランダム）
-let satLevel=2; const SAT_LEVELS=[1.0,3.25,5.5,7.75,10.0]; // 彩度5段階(1〜10)
-const SAT_WEIGHTS=[5,4,3,2,1]; // 低彩度ほど出やすく（派手の偏りを抑制）
+let satLevel=2; const SAT_LEVELS=[1.0,1.5,2.0,2.5,3.0]; // 彩度5段階（1〜3）
+const SAT_WEIGHTS=[4,4,3,2,1]; // 低〜中彩度を出やすく（派手は控えめ）
 function weightedIndex(weights){
   let total=0; for(const w of weights) total+=w;
   let r=Math.random()*total;
@@ -682,7 +685,7 @@ function renderStack(forceLong){
   ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high';
   ctx.globalCompositeOperation='source-over';
   ctx.fillStyle='#000'; ctx.fillRect(0,0,W,H);
-  const maxShift=Math.min(W,H)*0.10, maxBlur=Math.min(W,H)*0.015;
+  const maxShift=Math.min(W,H)*0.10, maxBlur=Math.min(W,H)*0.0015; // 重ねレイヤーのボケを最小限に（ほぼシャープ）
   photos.forEach((p,i)=>{
     ctx.globalCompositeOperation=i===0?'source-over':(p.blend||globalBlend);
     const bl=(p.jblur||0)*maxBlur;
@@ -1048,21 +1051,17 @@ function applyEffect(){
       let m=1-Math.min(1, band/0.5); m=m*m*(3-2*m);                  // なめらかな線（アンチエイリアス気味）
       return m; };
     const pt=Math.max(1.3, Math.min(w,h)/1200);                     // 目の細かい紙（高周波）
-    const rca=Math.cos(0.7), rsa=Math.sin(0.7);                     // 格子の軸整列を崩す回転
     for(let y=0;y<h;y++)for(let x=0;x<w;x++){
       const i=y*w+x, j=i*4;
       const tone=1-gray[i]/255;
       let ink, strongLine=0;
       if(rough){
-        // 粗い鉛筆（軽量版）：回転＋2オクターブで格子の織り目を消し、細粒は画素ハッシュでクリーンに
+        // 粗い鉛筆（軽量版）：濃淡ムラ（雲状のウネウネ）を除去、暗部は均一トーン＋細粒のみ
         let t2=Math.max(0, Math.min(1, (tone-0.2)/0.62));        // 明部を白へ飛ばす・暗部を圧縮
         let base=t2<0.5 ? 2*t2*t2 : 1-2*(1-t2)*(1-t2);           // S字コントラスト
         base=Math.min(1, base*1.15);                              // 暗部をさらに濃く
-        const xr=x*rca-y*rsa, yr=x*rsa+y*rca;
-        const g1=sp*0.5*roughMul, g2=g1*0.45;
-        const gm=0.62*vnoise(xr/g1+11, yr/g1+11)+0.38*vnoise(yr/g2+30, xr/g2+30); // 濃淡のムラ（2オクターブ）
-        const gf=fxHash(x, y);                                    // 細粒（格子補間を使わない＝モアレ無し）
-        ink=base*(0.72+0.45*gm)*(0.84+0.24*gf);
+        const gf=fxHash(x, y);                                    // 細粒（格子補間なし＝モアレ無し）
+        ink=base*(0.84+0.24*gf);
         if(gf<0.3) ink*=0.62;                                        // 細かい白抜け
       } else {
         let sk=gray[i]*255/Math.max(1,255-binv[i]); if(sk>255)sk=255;
@@ -1161,7 +1160,7 @@ function applyEffect(){
   else if(effect==='spraypaint'){
     // ラッカースプレー：ラフに吹き付けた塗り（吹きムラ・吹き筋・粗い飛沫）＋オーバースプレー＋滴
     const img=octx.getImageData(0,0,w,h), d=img.data, n=w*h;
-    const R=Math.max(1, Math.round(Math.min(w,h)/320));
+    const R=Math.max(1, Math.round(Math.min(w,h)/800));   // ベースぼかしを弱める（輪郭をシャープ寄りに）
     const c0=new Float32Array(n),c1=new Float32Array(n),c2=new Float32Array(n);
     for(let i=0;i<n;i++){ const j=i*4; c0[i]=d[j];c1[i]=d[j+1];c2[i]=d[j+2]; }
     const b0=boxBlur1(c0,w,h,R), b1=boxBlur1(c1,w,h,R), b2=boxBlur1(c2,w,h,R);
@@ -1223,7 +1222,8 @@ function applyEffect(){
       const x0=(Math.random()*w)|0, y0=(Math.random()*h*0.7)|0, i=(y0*w+x0)*4;
       const cover=1-(0.299*d[i]+0.587*d[i+1]+0.114*d[i+2])/255; // 濃い（暗い）所だけ垂れる
       if(cover<0.45) continue;
-      const L=Math.min(w,h)*(0.2+Math.random()*1.6);       // 長さはランダム（画面制限なし＝下端を超えてもよい）
+      const u=Math.random();
+      const L=Math.min(w,h)*(0.03+Math.pow(u,1.7)*3.4);   // すごく短い〜すごく長いまで段階的（画面制限なし）
       const baseW=Math.max(2, Math.min(w,h)*0.004)*(0.8+Math.random()*0.8);
       const col=[d[i]*0.85, d[i+1]*0.85, d[i+2]*0.85];        // 局所色を少し濃く（湿った溜まり）
       drawDrip(d,w,h,x0,y0,L,baseW,col);
@@ -1481,7 +1481,7 @@ document.addEventListener('click',(e)=>{
   if(retakeArmed && !e.target.closest('#backBtn')) disarmRetake();
 });
 
-const FX_LIST=['normal','noise','8bit','16bit','invert','rgbshift','bloom','copier','silkscreen','risograph','dither','pixelsort','roughpencil','spraypaint','neon','gestural'];
+const FX_LIST=['normal','noise','8bit','16bit','invert','rgbshift','bloom','copier','silkscreen','risograph','dither','pixelsort','roughpencil','spraypaint','neon'];
 let fxSeed=(Math.random()*4294967296)>>>0;   // エフェクトの乱数シード（合成ごとに固定）
 function randomizeStyle(){
   effect=FX_LIST[(Math.random()*FX_LIST.length)|0];
@@ -1517,7 +1517,7 @@ const EFFECT_LABELS={normal:'Normal',noise:'Noise','8bit':'8bit','16bit':'16bit'
   invert:'Invert',rgbshift:'RGB Shift',
   bloom:'Bloom',copier:'Copier',silkscreen:'Silkscreen',
   risograph:'Risograph',dither:'Dither',pixelsort:'Pixel Sort',
-  roughpencil:'Rough Pencil',spraypaint:'Lacquer Spray',neon:'Neon',gestural:'Gestural'};
+  roughpencil:'Rough Pencil',spraypaint:'Lacquer Spray',neon:'Neon'};
 const BLEND_LABELS=Object.fromEntries(BLENDS); // 値→表示名
 function blendReadout(){
   if(!photos.length) return '—';
@@ -1673,6 +1673,14 @@ function buildExportBlob(){
   const longEdge=parseInt($('sizeSel').value,10)||1920;
   const renderLong=Math.min(longEdge, 4096);   // エフェクトは最大4096で再適用（高精細・処理時間を抑制）
   renderStack(renderLong);                      // 書き出し解像度で再合成
+  // 元画像より拡大される場合はボケ防止のシャープ（アンシャープマスク）をエフェクト前にかける
+  const srcLong=Math.max(photos[0].src.width, photos[0].src.height);
+  if(renderLong > srcLong*1.05){
+    const up=renderLong/srcLong;
+    const amt=Math.min(0.9, 0.3+0.25*(up-1));   // 拡大率に応じて強める
+    const rad=Math.max(1, Math.round(renderLong/1800));
+    unsharpMask(composed, amt, rad);
+  }
   applyEffect();                                // その解像度でエフェクトを再適用（拡大ボケなし）
   const rc=$('result');
   let src=rc;
@@ -1682,6 +1690,7 @@ function buildExportBlob(){
     ex.width=Math.round(rc.width*s); ex.height=Math.round(rc.height*s);
     const ectx=ex.getContext('2d'); ectx.imageSmoothingQuality='high';
     ectx.drawImage(rc,0,0,ex.width,ex.height);
+    unsharpMask(ex, Math.min(0.8,0.3+0.25*(s-1)), Math.max(1,Math.round(ex.width>ex.height?ex.width/1800:ex.height/1800))); // 拡大ボケ防止
     src=ex;
   }
   let bytes=dataURLtoBytes(src.toDataURL('image/png'));
@@ -1689,6 +1698,19 @@ function buildExportBlob(){
   const out={ blob:new Blob([bytes],{type:'image/png'}), filename:fileStamp()+'.png', longEdge };
   compose();                                    // プレビューを通常解像度へ戻す
   return out;
+}
+// アンシャープマスク：ぼかしとの差分を足してエッジを締める（拡大ボケ防止）
+function unsharpMask(cv, amount, radius){
+  const ctx=cv.getContext('2d'), w=cv.width, h=cv.height, n=w*h;
+  const img=ctx.getImageData(0,0,w,h), d=img.data;
+  const c0=new Float32Array(n),c1=new Float32Array(n),c2=new Float32Array(n);
+  for(let i=0;i<n;i++){ const j=i*4; c0[i]=d[j]; c1[i]=d[j+1]; c2[i]=d[j+2]; }
+  const b0=boxBlur1(c0,w,h,radius),b1=boxBlur1(c1,w,h,radius),b2=boxBlur1(c2,w,h,radius);
+  for(let i=0;i<n;i++){ const j=i*4;
+    let r=d[j]+amount*(d[j]-b0[i]), g=d[j+1]+amount*(d[j+1]-b1[i]), b=d[j+2]+amount*(d[j+2]-b2[i]);
+    d[j]=r<0?0:r>255?255:r; d[j+1]=g<0?0:g>255?255:g; d[j+2]=b<0?0:b>255?255:b;
+  }
+  ctx.putImageData(img,0,0);
 }
 $('saveBtn').onclick=()=>{
   if(mode==='glitch'){ saveGif(); return; }
