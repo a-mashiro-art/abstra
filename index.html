@@ -364,7 +364,7 @@ The application is provided "as is", without warranty of any kind, express or im
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
 <script>
-const APP_VERSION='v9.0';
+const APP_VERSION='v9.2';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
@@ -465,19 +465,25 @@ function paletteColor(colors, t){
 function treat(src, colors, levels){
   const w=src.width, h=src.height;
   const n=Math.max(2,levels|0);
-  const sfBlur=0.6+Math.random()*0.4;                  // ぼかし強度 0.6〜1.0
-  const sfMotion=0.6+Math.random()*0.4;                // ブレ強度 0.6〜1.0（独立）
-  const baseBlur=Math.max(1.5, Math.min(w,h)*0.006)*sfBlur;  // 軽いぼかし（ディテール保持）
+  const sfBlur=1+Math.random()*4;                     // ぼかし強度 1〜5
+  const sfMotion=1+Math.random()*4;                   // ブレ強度 1〜5（独立）
+  const stepBlur=Math.max(1, Math.min(w,h)*0.004)*sfBlur;   // 1ステップ分のぼかし（5回でディテールを残さない）
+  const blurSteps=5;
   const angle=Math.random()*Math.PI*2;
-  const len=Math.max(4, Math.min(w,h)*0.02)*sfMotion;       // 控えめなモーションブレ
-  const steps=14;
+  const len=Math.max(4, Math.min(w,h)*0.02)*sfMotion;       // モーションブレ
+  const steps=10;
 
-  // 1) ガウスぼかし
-  const blr=document.createElement('canvas'); blr.width=w; blr.height=h;
-  const bctx=blr.getContext('2d');
-  bctx.filter='blur('+baseBlur+'px)';
-  bctx.drawImage(src,0,0,w,h);
-  bctx.filter='none';
+  // 1) ガウスぼかし（5ステップで段階的に＝強め・ディテール非保持）
+  let cur=src;
+  for(let s=0;s<blurSteps;s++){
+    const tmp=document.createElement('canvas'); tmp.width=w; tmp.height=h;
+    const tctx=tmp.getContext('2d');
+    tctx.filter='blur('+stepBlur+'px)';
+    tctx.drawImage(cur,0,0,w,h);
+    tctx.filter='none';
+    cur=tmp;
+  }
+  const blr=cur;
 
   // 2) 方向性モーションブレ（角度ランダム）
   const mo=document.createElement('canvas'); mo.width=w; mo.height=h;
@@ -491,7 +497,7 @@ function treat(src, colors, levels){
   mctx.globalAlpha=1;
 
   // 3) ポスタライズ → 多色マッピング → 粒子(グレイン)
-  const grain=Math.random()<0.7 ? Math.random()*5 : 5+Math.random()*5; // 0〜10（0〜5を多めに）
+  const grain=Math.random()*10;           // 粒状 0〜10
   const gamp=grain*6;                     // ノイズ振幅
   const img=mctx.getImageData(0,0,w,h);
   const d=img.data;
@@ -764,7 +770,7 @@ function shufflePhotos(){
 
 function compose(){
   const b=photos[0]&&photos[0].src;                       // プレビューは長辺1600pxに制限（重いエフェクトの高速化）
-  const cap=b ? Math.min(1600, Math.max(b.width,b.height)) : 0;
+  const cap=b ? Math.min(1280, Math.max(b.width,b.height)) : 0; // プレビューは長辺1280pxに制限（高速化）
   renderStack(cap||undefined);
   if(mode==='glitch'){ startGlitch(); }
   else { stopGlitch(); applyEffect(); }
@@ -1108,15 +1114,15 @@ function applyEffect(){
     for(let i=0;i<n;i++){ const j=i*4; c0[i]=d[j];c1[i]=d[j+1];c2[i]=d[j+2]; }
     const f=Math.min(w,h);
     const Rp=Math.max(4, Math.round(f/80));
-    const blurN=a=>{ let t=a; for(let k=0;k<5;k++) t=boxBlur1(t,w,h,Rp); return t; }; // 5回＝丸い大滲み
+    const blurN=a=>{ let t=a; for(let k=0;k<4;k++) t=boxBlur1(t,w,h,Rp); return t; }; // 4回＝丸い大滲み（軽量化）
     const b0=blurN(c0), b1=blurN(c1), b2=blurN(c2);
     const amp=f*0.11, gS=Math.max(1.5,f/600), pt=Math.max(1.3,f/1200); // うねり大＝形を溶かして混ぜる
     const paper=[250,249,245];                            // 明るい紙白（光は紙から）
     for(let y=0;y<h;y++)for(let x=0;x<w;x++){
       const i=y*w+x, j=i*4;
-      // wet-on-wet：有機的な3オクターブの大きなうねりで形・輪郭を溶かして混ぜる
-      const wx=((vnoise(x/(f*0.16)+1,y/(f*0.16)+1)-0.5)+(vnoise(x/(f*0.06)+7,y/(f*0.06)+7)-0.5)*0.6+(vnoise(x/(f*0.02)+5,y/(f*0.02)+5)-0.5)*0.3)*amp;
-      const wy=((vnoise(x/(f*0.16)+9,y/(f*0.16)+9)-0.5)+(vnoise(x/(f*0.06)+3,y/(f*0.06)+3)-0.5)*0.6+(vnoise(x/(f*0.02)+8,y/(f*0.02)+8)-0.5)*0.3)*amp;
+      // wet-on-wet：有機的な2オクターブの大きなうねりで形・輪郭を溶かして混ぜる
+      const wx=((vnoise(x/(f*0.16)+1,y/(f*0.16)+1)-0.5)+(vnoise(x/(f*0.06)+7,y/(f*0.06)+7)-0.5)*0.6)*amp;
+      const wy=((vnoise(x/(f*0.16)+9,y/(f*0.16)+9)-0.5)+(vnoise(x/(f*0.06)+3,y/(f*0.06)+3)-0.5)*0.6)*amp;
       let sx=Math.round(x+wx), sy=Math.round(y+wy);
       sx=sx<0?0:sx>=w?w-1:sx; sy=sy<0?0:sy>=h?h-1:sy;
       const si=sy*w+sx;
