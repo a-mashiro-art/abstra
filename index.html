@@ -364,7 +364,7 @@ The application is provided "as is", without warranty of any kind, express or im
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
 <script>
-const APP_VERSION='v9.6';
+const APP_VERSION='v9.8';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
@@ -867,6 +867,10 @@ function applyEffect(){
   out.width=w; out.height=h;
   const octx=out.getContext('2d');
   octx.drawImage(composed,0,0);
+  const _origRandom=Math.random;                 // エフェクト適用中はシード固定の疑似乱数（プレビュー＝保存を一致させる）
+  let _s=(fxSeed>>>0)||1;
+  Math.random=function(){ _s=(_s*1664525+1013904223)>>>0; return _s/4294967296; };
+  try{
   if(effect==='noise'){
     const img=octx.getImageData(0,0,w,h), dd=img.data;
     const gs=Math.max(1, Math.round(fxScale*1.4));
@@ -1053,7 +1057,8 @@ function applyEffect(){
       let ink;
       if(rough){
         // 粗い鉛筆：直線ハッチを使わず、線にならない有機的なザラつきで陰影（細かい斜め線を出さない）
-        const base=Math.pow(tone,1.4)*0.92;                          // 暗部はベタで埋める
+        let base=tone<0.5 ? 2*tone*tone : 1-2*(1-tone)*(1-tone); // S字コントラストで明暗を強く
+        base=Math.min(1, base*1.08);                                // 暗部をさらに濃く
         const gm=vnoise(x/(sp*0.5)+11, y/(sp*0.5)+11);               // 中細のムラ
         const gf=vnoise(x/(sp*0.053)+3, y/(sp*0.053)+3);             // かなり細かい粒（白抜け約30倍細かく）
         ink=base*press*(0.72+0.45*gm)*(0.84+0.24*gf);
@@ -1321,6 +1326,7 @@ function applyEffect(){
     if(cd[i+2]>248) cd[i+2]=248;
   }
   octx.putImageData(cap,0,0);
+  } finally { Math.random=_origRandom; }
 }
 
 // --- グリッチ（撮影画像を使った動画／GIF用） ---
@@ -1480,10 +1486,12 @@ document.addEventListener('click',(e)=>{
 });
 
 const FX_LIST=['normal','noise','8bit','16bit','invert','rgbshift','bloom','copier','silkscreen','risograph','dither','pixelsort','roughpencil','spraypaint','neon','gestural'];
+let fxSeed=(Math.random()*4294967296)>>>0;   // エフェクトの乱数シード（合成ごとに固定）
 function randomizeStyle(){
   effect=FX_LIST[(Math.random()*FX_LIST.length)|0];
   glitchSeed=(Math.random()*1000)|0;     // グリッチ時のパターン
   fxScale=0.6+Math.random()*1.6;
+  fxSeed=(Math.random()*4294967296)>>>0; // 新しい見た目のシードを決定
 }
 $('rerollAllBtn').onclick=()=>{
   photos.forEach(p=>{
