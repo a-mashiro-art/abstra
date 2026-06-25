@@ -364,7 +364,7 @@ The application is provided "as is", without warranty of any kind, express or im
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
 <script>
-const APP_VERSION='v9.8';
+const APP_VERSION='v9.9';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
@@ -1034,6 +1034,7 @@ function applyEffect(){
     for(let i=0;i<n;i++){ const j=i*4, g=0.299*d[j]+0.587*d[j+1]+0.114*d[j+2]; gray[i]=g; inv[i]=255-g; }
     const binv=boxBlur1(inv,w,h,Math.max(2, Math.round(Math.min(w,h)/130)));
     const sp=Math.max(2, Math.round(Math.min(w,h)/(rough?150:colored?820:880)));   // ストローク尺度（鉛筆系は細かく）
+    const roughMul=5+Math.random()*5;                     // 粗い鉛筆の濃淡サイズ 5〜10倍（生成ごとにランダム）
     const paper=[246,243,235], graphite=[40,38,36];
     const A=[0.40, 1.25, 2.05, 0.85];                      // 多方向（水平/垂直を避ける）
     const ss=(a,b,t)=>{ t=Math.max(0,Math.min(1,(t-a)/(b-a))); return t*t*(3-2*t); };
@@ -1059,7 +1060,7 @@ function applyEffect(){
         // 粗い鉛筆：直線ハッチを使わず、線にならない有機的なザラつきで陰影（細かい斜め線を出さない）
         let base=tone<0.5 ? 2*tone*tone : 1-2*(1-tone)*(1-tone); // S字コントラストで明暗を強く
         base=Math.min(1, base*1.08);                                // 暗部をさらに濃く
-        const gm=vnoise(x/(sp*0.5)+11, y/(sp*0.5)+11);               // 中細のムラ
+        const gm=vnoise(x/(sp*0.5*roughMul)+11, y/(sp*0.5*roughMul)+11); // 濃淡のムラ（5〜10倍に拡大）
         const gf=vnoise(x/(sp*0.053)+3, y/(sp*0.053)+3);             // かなり細かい粒（白抜け約30倍細かく）
         ink=base*press*(0.72+0.45*gm)*(0.84+0.24*gf);
         if(gf<0.3) ink*=0.62;                                        // 細かい白抜け
