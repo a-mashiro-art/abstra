@@ -364,7 +364,7 @@ The application is provided "as is", without warranty of any kind, express or im
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
 <script>
-const APP_VERSION='v11.8';
+const APP_VERSION='v12.0';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
@@ -673,6 +673,7 @@ function weightedIndex(weights){
 let toneIdx=0; const TONE_LEVELS=[0,0.08,0.16,0.24,0.32]; let toneLift=0; // 中間調リフト(Off+4段)
 function randBlend(){ return BLENDS[(Math.random()*BLENDS.length)|0][0]; }
 let effect='normal';         // 表現エフェクト（スチール時）: normal / noise
+let effect2=null;            // 二重がけ用の2つ目のエフェクト（20%で発生）
 let fxScale=1;               // ノイズ/グリッチの強度スケール（別パターンでランダム）
 let glitchSeed=0;            // グリッチのパターン種（別パターンでランダム）
 
@@ -776,9 +777,21 @@ function compose(){
   const cap=b ? Math.min(1280, Math.max(b.width,b.height)) : 0; // プレビューは長辺1280pxに制限（高速化）
   renderStack(cap||undefined);
   if(mode==='glitch'){ startGlitch(); }
-  else { stopGlitch(); applyEffect(); }
+  else { stopGlitch(); applyEffectChain(); }
   if(!$('result').classList.contains('fs')) applyMat(); // 再合成後もボーダー維持
   updateSizeLock(); updateEffectLock(); updateAdjustReadout();
+}
+// エフェクト適用（effect2があれば二重がけ：1回目の結果に2回目を重ねる）
+function applyEffectChain(){
+  applyEffect();
+  if(effect2){
+    const r=$('result');
+    composed.width=r.width; composed.height=r.height;
+    composed.getContext('2d').drawImage(r,0,0);   // 1回目の結果を入力にする
+    const e=effect; effect=effect2;
+    applyEffect();
+    effect=e;                                     // ラベル用に1つ目へ戻す
+  }
 }
 
 // --- スチール用エフェクト（ノーマル / ノイズ / 8bit / 16bit） ---
@@ -1317,9 +1330,9 @@ function applyEffect(){
   }
   const cap=octx.getImageData(0,0,w,h), cd=cap.data;
   for(let i=0;i<cd.length;i+=4){
-    if(cd[i]>248) cd[i]=248;
-    if(cd[i+1]>248) cd[i+1]=248;
-    if(cd[i+2]>248) cd[i+2]=248;
+    if(cd[i]>245) cd[i]=245;
+    if(cd[i+1]>245) cd[i+1]=245;
+    if(cd[i+2]>245) cd[i+2]=245;
   }
   octx.putImageData(cap,0,0);
   } finally { Math.random=_origRandom; }
@@ -1481,10 +1494,15 @@ document.addEventListener('click',(e)=>{
   if(retakeArmed && !e.target.closest('#backBtn')) disarmRetake();
 });
 
-const FX_LIST=['normal','noise','8bit','16bit','invert','rgbshift','bloom','copier','silkscreen','risograph','dither','pixelsort','roughpencil','spraypaint','neon'];
+const FX_LIST=['normal','noise','8bit','16bit','invert','rgbshift','copier','silkscreen','risograph','dither','pixelsort','roughpencil','spraypaint','neon'];
 let fxSeed=(Math.random()*4294967296)>>>0;   // エフェクトの乱数シード（合成ごとに固定）
 function randomizeStyle(){
   effect=FX_LIST[(Math.random()*FX_LIST.length)|0];
+  // 20%の確率で二重がけ（2つ目はnormal以外からランダム。同じになることもある）
+  if(Math.random()<0.2){
+    const pool=FX_LIST.filter(e=>e!=='normal');
+    effect2=pool[(Math.random()*pool.length)|0];
+  } else { effect2=null; }
   glitchSeed=(Math.random()*1000)|0;     // グリッチ時のパターン
   fxScale=0.6+Math.random()*1.6;
   fxSeed=(Math.random()*4294967296)>>>0; // 新しい見た目のシードを決定
@@ -1515,7 +1533,7 @@ $('matToggle').onclick=e=>{
 };
 const EFFECT_LABELS={normal:'Normal',noise:'Noise','8bit':'8bit','16bit':'16bit',
   invert:'Invert',rgbshift:'RGB Shift',
-  bloom:'Bloom',copier:'Copier',silkscreen:'Silkscreen',
+  copier:'Copier',silkscreen:'Silkscreen',
   risograph:'Risograph',dither:'Dither',pixelsort:'Pixel Sort',
   roughpencil:'Rough Pencil',spraypaint:'Lacquer Spray',neon:'Neon'};
 const BLEND_LABELS=Object.fromEntries(BLENDS); // 値→表示名
@@ -1528,7 +1546,7 @@ function blendReadout(){
 function updateAdjustReadout(){
   const set=(id,v)=>{ const e=$(id); if(e) e.textContent=v; };
   set('blendVal', blendReadout());
-  set('effectVal', EFFECT_LABELS[effect]||effect);
+  set('effectVal', (EFFECT_LABELS[effect]||effect)+(effect2?(' + '+(EFFECT_LABELS[effect2]||effect2)):''));
   set('satVal', (satLevel+1)+' / 5');
   set('toneVal', toneIdx===0 ? 'Off' : (toneIdx+1)+' / 5');
 }
@@ -1681,7 +1699,7 @@ function buildExportBlob(){
     const rad=Math.max(1, Math.round(renderLong/1800));
     unsharpMask(composed, amt, rad);
   }
-  applyEffect();                                // その解像度でエフェクトを再適用（拡大ボケなし）
+  applyEffectChain();                           // その解像度でエフェクトを再適用（二重がけ対応）
   const rc=$('result');
   let src=rc;
   if(longEdge > Math.max(rc.width, rc.height)){ // 4096超の指定なら軽く拡大
