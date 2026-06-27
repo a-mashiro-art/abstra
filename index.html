@@ -108,7 +108,6 @@
   .slot.empty{border-style:dashed;opacity:.5;}
   .slot.need{border-style:solid;border-color:#ff3b30;border-width:2px;opacity:1;}
   .slot img{width:100%;height:100%;object-fit:cover;}
-  .slot .chip{position:absolute;left:0;bottom:0;width:100%;height:6px;}
   .strip-label{flex:0 0 auto;font-size:10px;color:var(--ink);margin-left:auto;
     text-align:right;line-height:1.4;text-shadow:0 1px 3px rgba(0,0,0,.8);}
 
@@ -360,7 +359,7 @@ The application is provided "as is", without warranty of any kind, express or im
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
 <script>
-const APP_VERSION='v13.5';
+const APP_VERSION='v13.6';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
@@ -649,8 +648,7 @@ function renderStrip(){
     s.className='slot'+(filled?'':' empty')+(need && i<MIN?' need':'');
     if(filled){
       const im=document.createElement('img'); im.src=photos[i].tinted.toDataURL('image/jpeg',0.6);
-      const chip=document.createElement('div'); chip.className='chip'; chip.style.background=grad(photos[i]);
-      s.appendChild(im); s.appendChild(chip);
+      s.appendChild(im);
       s.onclick=()=>openPreview(i);
     }
     strip.appendChild(s);
