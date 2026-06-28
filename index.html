@@ -359,7 +359,7 @@ The application is provided "as is", without warranty of any kind, express or im
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
 <script>
-const APP_VERSION='v13.6';
+const APP_VERSION='v13.7';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
@@ -1278,7 +1278,7 @@ function applyEffect(){
       const u=Math.random();
       const L=Math.min(w,h)*(0.03+Math.pow(u,1.7)*3.4);   // すごく短い〜すごく長いまで段階的（画面制限なし）
       const baseW=Math.max(2, Math.min(w,h)*0.004)*(0.8+Math.random()*0.8);
-      const col=[d[i]*0.85, d[i+1]*0.85, d[i+2]*0.85];        // 局所色を少し濃く（湿った溜まり）
+      const col=[d[i], d[i+1], d[i+2]];                      // 起点の色と同一
       drawDrip(d,w,h,x0,y0,L,baseW,col);
     }
     octx.putImageData(img,0,0);
@@ -1640,6 +1640,7 @@ function randomizeStyle(){
   glitchSeed=(Math.random()*1000)|0;     // グリッチ時のパターン
   fxScale=0.6+Math.random()*1.6;
   minimalOn=Math.random()<0.2;           // 20%でミニマル化をオン（独立要素）
+  if(effect==='neon'||effect2==='neon') minimalOn=false;   // ネオンとフラットは併用しない
   fxSeed=(Math.random()*4294967296)>>>0; // 新しい見た目のシードを決定
 }
 $('rerollAllBtn').onclick=()=>{
