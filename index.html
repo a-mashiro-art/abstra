@@ -369,7 +369,7 @@ The application is provided "as is", without warranty of any kind, express or im
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
 /*! Abstra © 2026 A-Mashiro. All rights reserved. Unauthorized use prohibited. */
-const APP_VERSION='v14.1';
+const APP_VERSION='v14.2';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
@@ -1478,8 +1478,9 @@ function applyEffect(){
 
 function showEdit(){
   $('camView').style.display='none';
-  if(stream) stream.getVideoTracks().forEach(t=>t.enabled=false);  // 編集中はカメラ停止（発熱抑制）
-  try{ video.pause(); }catch(e){}
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }  // カメラを完全停止（iOSのインジケータも消灯・発熱/電力を抑制）
+  torchTrack=null; torchOK=false;
+  try{ video.pause(); video.srcObject=null; }catch(e){}
   $('editView').style.display='flex';
   $('result').style.display='block';
   $('result').classList.remove('fs');
@@ -1498,9 +1499,8 @@ function showEdit(){
 function showCam(){
   $('editView').style.display='none';
   $('camView').style.display='flex';
-  if(stream) stream.getVideoTracks().forEach(t=>t.enabled=true);   // カメラ復帰
-  try{ const p=video.play(); if(p&&p.catch) p.catch(()=>{}); }catch(e){}
   $('strobeBtn').style.display='';        // カメラ復帰で再表示
+  if(!stream) startCam();                 // カメラを再初期化
 }
 
 // events
@@ -1769,14 +1769,15 @@ video.addEventListener('loadedmetadata',layoutFrame);
 window.addEventListener('resize',layoutFrame);
 window.addEventListener('orientationchange',()=>setTimeout(layoutFrame,300));
 
-// バックグラウンド（タブ非表示・画面ロック・他アプリ）でカメラを停止して発熱を抑制
+// バックグラウンド（タブ非表示・画面ロック・他アプリ）でカメラを完全停止して発熱/電力を抑制
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden){
-    if(stream) stream.getVideoTracks().forEach(t=>t.enabled=false);
-    try{ video.pause(); }catch(e){}
+    if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+    torchTrack=null; torchOK=false;
+    try{ video.pause(); video.srcObject=null; }catch(e){}
   } else {
     const onCam=$('camView').style.display!=='none';
-    if(onCam && stream){ stream.getVideoTracks().forEach(t=>t.enabled=true); try{ const p=video.play(); if(p&&p.catch) p.catch(()=>{}); }catch(e){} }
+    if(onCam && !stream) startCam();
   }
 });
 
