@@ -369,7 +369,7 @@ The application is provided "as is", without warranty of any kind, express or im
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
 /*! Abstra © 2026 A-Mashiro. All rights reserved. Unauthorized use prohibited. */
-const APP_VERSION='v14.2';
+const APP_VERSION='v14.9';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
@@ -1234,6 +1234,7 @@ function applyEffect(){
     for(let i=0;i<n;i++){ cov[i]=1-(0.299*b0[i]+0.587*b1[i]+0.114*b2[i])/255; }
     const HR=Math.max(4, Math.round(Math.min(w,h)/70));        // 近接範囲（物体中心）
     const covB=boxBlur1(cov,w,h,HR);
+    const hb0=boxBlur1(c0,w,h,HR), hb1=boxBlur1(c1,w,h,HR), hb2=boxBlur1(c2,w,h,HR); // 物体色が周辺へにじみ出した色場（ミスト用）
     for(let y=0;y<h;y++)for(let x=0;x<w;x++){
       const i=y*w+x;
       const near=covB[i];
@@ -1242,7 +1243,7 @@ function applyEffect(){
       if(halo<0.02) continue;                                  // 物体の内側(ベタ)には乗せない＝周辺のみ
       const p=halo*(0.5+0.9*near);                             // 周辺で、物体に近いほど密
       if(Math.random() >= p*0.5) continue;
-      const sci=i, col=[b0[sci]*0.85,b1[sci]*0.85,b2[sci]*0.85]; // 画面内（近傍）の色
+      const sci=i, col=[hb0[sci]*0.9,hb1[sci]*0.9,hb2[sci]*0.9]; // 物体色が周辺へにじみ出した色（背景色を拾わない）
       const a=0.25+Math.random()*0.55;
       const s=1+(Math.random()<0.4?1:0)+(Math.random()<0.12?1:0); // ランダムサイズ 1〜3
       stampDot(d,w,h,x,y,s,a,col);
@@ -1274,13 +1275,12 @@ function applyEffect(){
     const prob=0.2+(amount-15)/35*0.4;                     // 量に比例 20〜60%
     for(let t=0;t<amount;t++){
       if(Math.random()>=prob) continue;                    // 出現確率
-      const x0=(Math.random()*w)|0, y0=(Math.random()*h*0.7)|0, i=(y0*w+x0)*4;
-      const cover=1-(0.299*d[i]+0.587*d[i+1]+0.114*d[i+2])/255; // 濃い（暗い）所だけ垂れる
-      if(cover<0.45) continue;
+      const x0=(Math.random()*w)|0, y0=(Math.random()*h*0.7)|0, oi=y0*w+x0;
+      if(cov[oi]<0.45) continue;                            // 濃い（暗い）所だけ垂れる（加工前で判定）
       const u=Math.random();
       const L=Math.min(w,h)*(0.03+Math.pow(u,1.7)*3.4);   // すごく短い〜すごく長いまで段階的（画面制限なし）
       const baseW=Math.max(2, Math.min(w,h)*0.004)*(0.8+Math.random()*0.8);
-      const col=[d[i], d[i+1], d[i+2]];                      // 起点の色と同一
+      const col=[b0[oi], b1[oi], b2[oi]];                   // 起点の色と同一（加工前の物体色）
       drawDrip(d,w,h,x0,y0,L,baseW,col);
     }
     octx.putImageData(img,0,0);
@@ -1369,6 +1369,90 @@ function applyEffect(){
       octx.fillStyle=cs+'0.85)';
       octx.beginPath(); octx.arc(px+(Math.random()-0.5)*f*0.012, py+L, wd*1.3, 0, Math.PI*2); octx.fill();
     }
+  }
+  else if(effect==='ripple'){
+    // 物体のシルエットから同心の波紋が広がる：輪郭からの距離場で波紋リングを描く
+    const nn=w*h, f=Math.min(w,h);
+    const img=octx.getImageData(0,0,w,h), d=img.data;
+    const lum=new Float32Array(nn); let mean=0;
+    for(let i=0;i<nn;i++){ const j=i*4; const L=0.299*d[j]+0.587*d[j+1]+0.114*d[j+2]; lum[i]=L; mean+=L; }
+    mean/=nn;
+    const thr=mean*(0.7+Math.random()*0.25);
+    const mask=new Uint8Array(nn); let cntLo=0;
+    for(let i=0;i<nn;i++){ if(lum[i]<thr){ mask[i]=1; cntLo++; } }
+    if(cntLo>nn*0.5){ for(let i=0;i<nn;i++) mask[i]=mask[i]?0:1; }   // 物体（少数側）をシルエットに
+    // 距離変換（2パス チャンファ）：シルエット境界からの距離
+    const INF=1e9, D=new Float32Array(nn), SQ=Math.SQRT2;
+    for(let i=0;i<nn;i++) D[i]=mask[i]?0:INF;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const i=y*w+x; if(D[i]===0) continue; let v=D[i];
+      if(x>0){ const c=D[i-1]+1; if(c<v)v=c; }
+      if(y>0){ const c=D[i-w]+1; if(c<v)v=c; }
+      if(x>0&&y>0){ const c=D[i-w-1]+SQ; if(c<v)v=c; }
+      if(x<w-1&&y>0){ const c=D[i-w+1]+SQ; if(c<v)v=c; }
+      D[i]=v; }
+    for(let y=h-1;y>=0;y--) for(let x=w-1;x>=0;x--){ const i=y*w+x; let v=D[i];
+      if(x<w-1){ const c=D[i+1]+1; if(c<v)v=c; }
+      if(y<h-1){ const c=D[i+w]+1; if(c<v)v=c; }
+      if(x<w-1&&y<h-1){ const c=D[i+w+1]+SQ; if(c<v)v=c; }
+      if(x>0&&y<h-1){ const c=D[i+w-1]+SQ; if(c<v)v=c; }
+      D[i]=v; }
+    const wl=f*(0.02+Math.random()*0.045);      // 波紋の間隔
+    const maxD=f*(0.5+Math.random()*0.7);        // 波紋が届く距離（広め）
+    const phase=Math.random()*6.283;
+    const baseHue=Math.random();                  // 波紋の基準色相
+    const hueStep=0.10+Math.random()*0.18;        // リング1周ごとの色相シフト（巡って混ざる）
+    const strength=0.55+Math.random()*0.35;
+    const TAU=6.283185;
+    const hsv=(hh,s,v)=>{ hh=(hh-Math.floor(hh))*6; const c=v*s, X=c*(1-Math.abs(hh%2-1)), m=v-c; let r,g,b; const hi=Math.floor(hh)%6;
+      if(hi===0){r=c;g=X;b=0;}else if(hi===1){r=X;g=c;b=0;}else if(hi===2){r=0;g=c;b=X;}else if(hi===3){r=0;g=X;b=c;}else if(hi===4){r=X;g=0;b=c;}else{r=c;g=0;b=X;}
+      return [r+m,g+m,b+m]; };
+    for(let i=0;i<nn;i++){ const j=i*4;
+      const br=d[j], bg=d[j+1], bb=d[j+2];        // 元画像そのままの色を地に
+      const dd=D[i];
+      // 距離で色相が巡るカラフルな波紋（スクリーン加算で重なりが混ざる）
+      const ring=Math.pow(0.5+0.5*Math.sin(dd/wl*TAU+phase), 1.3);
+      const fall=0.30+0.70*Math.max(0,1-dd/maxD);
+      const wgt=ring*fall*strength;
+      const hue=baseHue+(dd/wl)*hueStep;
+      const c=hsv(hue,0.9,255), cr=c[0]*wgt, cg=c[1]*wgt, cb=c[2]*wgt;
+      d[j]=255-(255-br)*(255-cr)/255;
+      d[j+1]=255-(255-bg)*(255-cg)/255;
+      d[j+2]=255-(255-bb)*(255-cb)/255;
+    }
+    octx.putImageData(img,0,0);
+  }
+  else if(effect==='zen'){
+    // Zen：墨絵風。濃淡（にじみ・墨だまり）を残しつつ、暗部は純黒・明部は純白へ極端に分離
+    const nn=w*h, f=Math.min(w,h);
+    const img=octx.getImageData(0,0,w,h), d=img.data;
+    const L=new Float32Array(nn);
+    for(let i=0;i<nn;i++){ const j=i*4; L[i]=(0.299*d[j]+0.587*d[j+1]+0.114*d[j+2])/255; }
+    const gamma=0.7+Math.random()*0.5;
+    const center=0.42+Math.random()*0.12;         // 二値化の境
+    const half=0.03+Math.random()*0.05;           // 遷移幅を狭く＝極端なモノクロ
+    const loThr=center-half, hiThr=center+half;
+    const paper=[251,249,244], ink=[10,9,12];      // ほぼ純白・純黒
+    // 掠れ（dry brush）：筆方向に沿った筋状の抜け
+    const kang=Math.random()*Math.PI, kca=Math.cos(kang), ksa=Math.sin(kang);
+    const along=f*(0.12+Math.random()*0.12), across=f*(0.006+Math.random()*0.006);
+    const kasAmt=0.28+Math.random()*0.22;
+    for(let i=0;i<nn;i++){ const j=i*4, x=i%w, y=(i/w)|0;
+      let k=Math.pow(1-L[i], gamma);              // ぼかさず原画の鮮鋭さを保持
+      if(x>0&&x<w-1&&y>0&&y<h-1){ const gx=L[i+1]-L[i-1], gy=L[i+w]-L[i-w]; k=Math.min(1, k+Math.min(1,Math.hypot(gx,gy)*2.4)*0.34); }  // 輪郭の墨だまり
+      let kk;
+      if(k>=hiThr) kk=1;                           // 純黒
+      else if(k<=loThr) kk=0;                      // 純白
+      else { let t=(k-loThr)/(hiThr-loThr); kk=t*t*(3-2*t); }   // 狭い帯をS字で二値寄りに
+      if(kk>0.5){                                   // 墨の部分に掠れ（筆方向の筋で紙を覗かせる）
+        const u=x*kca+y*ksa, v=-x*ksa+y*kca;
+        const st=vnoise(u/along, v/across)*0.7 + vnoise(u/(along*0.4)+11, v/(across*0.5)+11)*0.3;
+        const dry=Math.max(0,Math.min(1, 1-(k-hiThr)/(1-hiThr)));  // 深い墨ほど掠れにくい
+        if(st < kasAmt*(0.45+0.55*dry)) kk=0;
+      }
+      if(kk>0&&kk<1){ const grn=(fxHash(x,y)-0.5)*0.04; kk=Math.max(0,Math.min(1, kk+grn)); }
+      d[j]=paper[0]*(1-kk)+ink[0]*kk; d[j+1]=paper[1]*(1-kk)+ink[1]*kk; d[j+2]=paper[2]*(1-kk)+ink[2]*kk;
+    }
+    octx.putImageData(img,0,0);
   }
   else if(effect==='straighten'){
     // Construct：構成主義的な語彙（テーパー線＋平行/垂直の線族＋回転バー＋円/同心/ドット）。塗りは画像色、線は黒主体
@@ -1537,7 +1621,7 @@ document.addEventListener('click',(e)=>{
   if(retakeArmed && !e.target.closest('#backBtn')) disarmRetake();
 });
 
-const FX_LIST=['normal','noise','8bit','16bit','invert','rgbshift','copier','silkscreen','risograph','dither','pixelsort','roughpencil','spraypaint','neon'];
+const FX_LIST=['normal','noise','8bit','16bit','invert','rgbshift','copier','silkscreen','risograph','dither','pixelsort','roughpencil','spraypaint','neon','ripple','zen'];
 let fxSeed=(Math.random()*4294967296)>>>0;   // エフェクトの乱数シード（合成ごとに固定）
 function randomizeStyle(){
   effect=FX_LIST[(Math.random()*FX_LIST.length)|0];
@@ -1579,7 +1663,7 @@ const EFFECT_LABELS={normal:'Normal',noise:'Noise','8bit':'8bit','16bit':'16bit'
   invert:'Invert',rgbshift:'RGB Shift',
   copier:'Copier',silkscreen:'Silkscreen',
   risograph:'Risograph',dither:'Dither',pixelsort:'Pixel Sort',
-  roughpencil:'Rough Pencil',spraypaint:'Lacquer Spray',neon:'Neon'};
+  roughpencil:'Rough Pencil',spraypaint:'Lacquer Spray',neon:'Neon',ripple:'Ripple',zen:'Zen'};
 const BLEND_LABELS=Object.fromEntries(BLENDS); // 値→表示名
 function blendReadout(){
   if(!photos.length) return '—';
