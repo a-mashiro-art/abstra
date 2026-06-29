@@ -1,10 +1,18 @@
 <!DOCTYPE html>
+<!--
+  Abstra — © 2026 A-Mashiro. All rights reserved.
+  Source code, design, UI, name, and branding are the property of A-Mashiro.
+  Unauthorized copying, redistribution, modification, or reverse-engineering is prohibited.
+  Artworks created with this app belong to their creators.
+-->
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="author" content="A-Mashiro">
+<meta name="copyright" content="© 2026 A-Mashiro. All rights reserved.">
 <title>Abstra</title>
 <style>
   :root{
@@ -78,13 +86,13 @@
   .lic-close{margin-top:18px;width:100%;background:var(--field);color:var(--ink);
     border:1px solid var(--line);border-radius:4px;padding:11px;cursor:pointer;
     font-family:inherit;font-size:13px;letter-spacing:.1em;}
-  .ratiobar,.modebar{display:flex;gap:2px;background:rgba(0,0,0,.55);
+  .ratiobar{display:flex;gap:2px;background:rgba(0,0,0,.55);
     border:1px solid var(--line);border-radius:3px;padding:2px;flex:0 0 auto;}
-  .ratiobar button,.modebar button{background:none;border:none;color:var(--dim);
+  .ratiobar button{background:none;border:none;color:var(--dim);
     font-size:11px;padding:6px 9px;border-radius:2px;cursor:pointer;
     letter-spacing:.04em;font-family:inherit;}
-  .ratiobar button.active,.modebar button.active{background:var(--ink);color:var(--bg);font-weight:600;}
-  .ratiobar.locked,.modebar.locked{opacity:.4;}
+  .ratiobar button.active{background:var(--ink);color:var(--bg);font-weight:600;}
+  .ratiobar.locked{opacity:.4;}
 
   .busy{position:absolute;inset:0;z-index:6;display:none;align-items:center;
     justify-content:center;background:rgba(0,0,0,.6);color:var(--ink);
@@ -299,7 +307,7 @@
         <span class="blabel mono">Blend</span>
         <span class="bval mono" id="blendVal">Random</span>
       </div>
-      <div class="blendrow stillonly">
+      <div class="blendrow">
         <span class="blabel mono">Effect</span>
         <span class="bval mono" id="effectVal">—</span>
       </div>
@@ -351,26 +359,22 @@ The Abstra application — including its source code, design, user interface, na
 
 Ownership of artworks. Any image or artwork you create using Abstra belongs to you, its creator. You retain full ownership of the works you produce with this app and may use them freely, including for personal, commercial, exhibition, and NFT purposes. A-Mashiro claims no rights over your created works.
 
-The application is provided "as is", without warranty of any kind, express or implied. A-Mashiro shall not be liable for any damages arising from the use of this application.</div>
+Your responsibility. You are solely responsible for the photographs and material you capture, input, or use with Abstra, and you represent that you hold all rights necessary to use them. You are responsible for ensuring that your use of the app and the works you create comply with all applicable laws and do not infringe the rights of others, including copyright, privacy, and portrait rights.
+
+The application is provided "as is", without warranty of any kind, express or implied. To the fullest extent permitted by law, A-Mashiro shall not be liable for, and bears no responsibility whatsoever for, any damages, losses, claims, disputes, or legal issues of any kind arising from or related to your use of this application or the works you create with it. You use Abstra entirely at your own risk, and any problems or consequences arising from such use are your sole responsibility.</div>
     <button class="lic-close mono" id="licClose">Close</button>
   </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
 <script>
-const APP_VERSION='v13.7';
+/*! Abstra © 2026 A-Mashiro. All rights reserved. Unauthorized use prohibited. */
+const APP_VERSION='v14.1';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
 let ratio={key:'1:1',w:1,h:1}; // w:h は縦長基準（短辺:長辺）
 let zoom=1; const ZMIN=1, ZMAX=5;
-let mode='still';            // 撮影前モード: still / glitch
-let glitchTimer=null, glitchFrame=0, glitchBase=null;
-let glitchPat=0;             // 0:スライス 1:ブロック 2:ウェーブ
-let glitchSpeed=95;          // 点滅速度(ms/フレーム)
-const GFRAMES=10;
-const GIF_WORKER='https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js';
 let textRemoval=false, busy=false;
 let strobe=false, torchTrack=null, torchOK=false;
 let ocrWorker=null, ocrReady=false;
@@ -393,7 +397,7 @@ async function startCam(){
   if(stream) stream.getTracks().forEach(t=>t.stop());
   try{
     stream=await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:facing,width:{ideal:2560},height:{ideal:2560}},audio:false});
+      video:{facingMode:facing,width:{ideal:1920},height:{ideal:1920}},audio:false});
     video.srcObject=stream;
     torchTrack=stream.getVideoTracks()[0];
     const caps=torchTrack.getCapabilities ? torchTrack.getCapabilities() : {};
@@ -677,8 +681,7 @@ function randBlend(){ return BLENDS[(Math.random()*BLENDS.length)|0][0]; }
 let effect='normal';         // 表現エフェクト（スチール時）: normal / noise
 let effect2=null;            // 二重がけ用の2つ目のエフェクト（20%で発生）
 let minimalOn=false;        // ミニマル化（独立要素・20%でオン）
-let fxScale=1;               // ノイズ/グリッチの強度スケール（別パターンでランダム）
-let glitchSeed=0;            // グリッチのパターン種（別パターンでランダム）
+let fxScale=1;               // ノイズ等の強度スケール（別パターンでランダム）
 
 // 回転・ズレを考慮し、4辺が画面外に出ない最小の拡大倍率（＝限界値）を返す
 function coverScale(W,H,rot,dx,dy){
@@ -789,10 +792,9 @@ function compose(){
   const b=photos[0]&&photos[0].src;                       // プレビューは長辺1600pxに制限（重いエフェクトの高速化）
   const cap=b ? Math.min(1280, Math.max(b.width,b.height)) : 0; // プレビューは長辺1280pxに制限（高速化）
   renderStack(cap||undefined);
-  if(mode==='glitch'){ startGlitch(); }
-  else { stopGlitch(); applyEffectChain(); }
+  applyEffectChain();
   if(!$('result').classList.contains('fs')) applyMat(); // 再合成後もボーダー維持
-  updateSizeLock(); updateEffectLock(); updateAdjustReadout();
+  updateAdjustReadout();
 }
 // エフェクト適用（effect2があれば二重がけ：1回目の結果に2回目を重ねる）
 function applyEffectChain(){
@@ -1472,106 +1474,12 @@ function applyEffect(){
   } finally { Math.random=_origRandom; }
 }
 
-// --- グリッチ（撮影画像を使った動画／GIF用） ---
-function makeBase(w,h){
-  const b=document.createElement('canvas'); b.width=w; b.height=h;
-  b.getContext('2d').drawImage(composed,0,0,w,h);
-  return b;
-}
-function rgbShift(octx,w,h){
-  const img=octx.getImageData(0,0,w,h), d=img.data, copy=new Uint8ClampedArray(d);
-  const off=Math.max(2, Math.round(w*0.004*(0.6+fxScale)));
-  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-    const p=(y*w+x)*4;
-    const rx=Math.min(w-1,x+off), bx=Math.max(0,x-off);
-    d[p]=copy[(y*w+rx)*4]; d[p+2]=copy[(y*w+bx)*4+2];
-  }
-  octx.putImageData(img,0,0);
-}
-// 0: スライス（横方向のずれ＋色ずれ）
-function glitchSlice(base, octx, w, h, seed){
-  const bands=10+((fxScale*8)|0);
-  for(let i=0;i<bands;i++){
-    const by=Math.floor(fxHash(i+seed,1)*h);
-    const bh=Math.max(2, Math.floor(3+fxHash(i+seed,2)*h*0.06));
-    const dx=Math.round((fxHash(i+seed,3)-0.5)*w*0.3);
-    if(by>=h||dx===0) continue;
-    octx.drawImage(base, 0,by,w,bh, dx,by,w,bh);
-    if(dx>0) octx.drawImage(base, w-dx,by,dx,bh, 0,by,dx,bh);
-    else     octx.drawImage(base, 0,by,-dx,bh, w+dx,by,-dx,bh);
-  }
-  rgbShift(octx,w,h);
-}
-// 1: ブロック（一部ブロックを横にずらす）
-function glitchBlock(base, octx, w, h, seed){
-  const cols=6+((fxScale*3)|0), rows=8+((fxScale*4)|0);
-  const bw=Math.ceil(w/cols), bh=Math.ceil(h/rows);
-  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
-    if(fxHash(c*7+r*13+seed,5)<0.62) continue;
-    const sx=c*bw, sy=r*bh;
-    const dx=Math.round((fxHash(c+seed*2,6)-0.5)*w*0.14);
-    if(dx!==0) octx.drawImage(base, sx,sy,bw,bh, sx+dx,sy,bw,bh);
-  }
-  rgbShift(octx,w,h);
-}
-// 2: ウェーブ（横揺れ＋走査線＋明滅）
-function glitchWave(base, octx, w, h, seed){
-  const amp=w*0.02*(0.6+fxScale), ph=fxHash(seed,8)*6.28, freq=4+fxHash(seed,9)*6;
-  for(let y=0;y<h;y+=2){
-    const dx=Math.round(Math.sin(y/h*freq*6.28+ph)*amp);
-    if(dx!==0) octx.drawImage(base, 0,y,w,2, dx,y,w,2);
-  }
-  octx.globalCompositeOperation='multiply';
-  octx.fillStyle='rgba(0,0,0,0.5)';
-  for(let y=0;y<h;y+=3) octx.fillRect(0,y,w,1);
-  const fl=fxHash(seed,10);
-  if(fl>0.5){ octx.globalCompositeOperation='screen';
-    octx.fillStyle='rgba(255,255,255,'+(0.05+fl*0.12).toFixed(3)+')'; octx.fillRect(0,0,w,h); }
-  octx.globalCompositeOperation='source-over';
-  rgbShift(octx,w,h);
-}
-function drawGlitch(base, octx, w, h, seed){
-  octx.clearRect(0,0,w,h);
-  octx.drawImage(base,0,0);
-  if(glitchPat===1) glitchBlock(base,octx,w,h,seed);
-  else if(glitchPat===2) glitchWave(base,octx,w,h,seed);
-  else glitchSlice(base,octx,w,h,seed);
-}
-function startGlitch(){
-  stopGlitch();
-  const cap=720, cw=composed.width, ch=composed.height, sc=Math.min(1,cap/Math.max(cw,ch));
-  const w=Math.round(cw*sc), h=Math.round(ch*sc);
-  const out=$('result'); out.width=w; out.height=h;
-  const octx=out.getContext('2d');
-  glitchBase=makeBase(w,h); glitchFrame=0;
-  drawGlitch(glitchBase, octx, w, h, glitchSeed*GFRAMES);
-  glitchTimer=setInterval(()=>{
-    glitchFrame=(glitchFrame+1)%GFRAMES;
-    drawGlitch(glitchBase, octx, w, h, glitchSeed*GFRAMES+glitchFrame);
-  }, glitchSpeed);
-}
-function stopGlitch(){ if(glitchTimer){ clearInterval(glitchTimer); glitchTimer=null; } }
 
-function updateSizeLock(){
-  const sel=$('sizeSel'); if(!sel) return;
-  let opt=sel.querySelector('option[value="480"]');
-  if(mode==='glitch'){
-    if(!opt){ opt=document.createElement('option'); opt.value='480'; opt.textContent='480 px (fixed)'; sel.insertBefore(opt, sel.firstChild); }
-    sel.value='480'; sel.disabled=true;
-  }else{
-    if(opt) opt.remove();
-    sel.disabled=false;
-    if(!sel.value || sel.value==='480') sel.value='1920';
-  }
-}
-function updateEffectLock(){
-  const g=(mode==='glitch');
-  document.querySelectorAll('.glitchonly').forEach(el=>el.style.display=g?'flex':'none');
-  document.querySelectorAll('.stillonly').forEach(el=>el.style.display=g?'none':'flex');
-}
 
 function showEdit(){
   $('camView').style.display='none';
+  if(stream) stream.getVideoTracks().forEach(t=>t.enabled=false);  // 編集中はカメラ停止（発熱抑制）
+  try{ video.pause(); }catch(e){}
   $('editView').style.display='flex';
   $('result').style.display='block';
   $('result').classList.remove('fs');
@@ -1588,9 +1496,10 @@ function showEdit(){
   $('flash').classList.remove('show');
 }
 function showCam(){
-  stopGlitch();
   $('editView').style.display='none';
   $('camView').style.display='flex';
+  if(stream) stream.getVideoTracks().forEach(t=>t.enabled=true);   // カメラ復帰
+  try{ const p=video.play(); if(p&&p.catch) p.catch(()=>{}); }catch(e){}
   $('strobeBtn').style.display='';        // カメラ復帰で再表示
 }
 
@@ -1637,7 +1546,6 @@ function randomizeStyle(){
     const pool=FX_LIST.filter(e=>e!=='normal'&&e!==effect);   // normalと同じものを除外
     effect2=pool.length?pool[(Math.random()*pool.length)|0]:null;
   } else { effect2=null; }
-  glitchSeed=(Math.random()*1000)|0;     // グリッチ時のパターン
   fxScale=0.6+Math.random()*1.6;
   minimalOn=Math.random()<0.2;           // 20%でミニマル化をオン（独立要素）
   if(effect==='neon'||effect2==='neon') minimalOn=false;   // ネオンとフラットは併用しない
@@ -1779,34 +1687,10 @@ function fileStamp(){
 }
 function authorName(){ return 'A-Mashiro'; }   // 作者は常に A-Mashiro で統一
 function buildPngMeta(){
-  const chunks=[ pngText('Software','Abstra By A-Mashiro'), pngText('Creation Time', nowStamp()) ];
+  const chunks=[ pngText('Software','Abstra By A-Mashiro'), pngText('Copyright','© 2026 A-Mashiro. All rights reserved.'), pngText('Creation Time', nowStamp()) ];
   const author=authorName();
   if(author) chunks.push(pngItext('Author', author));
   return chunks;
-}
-// --- GIFのコメント拡張（作者・作成日時） ---
-function metaText(){
-  let t='Abstra By A-Mashiro / Created: '+nowStamp();
-  const a=authorName(); if(a) t+=' / Author: '+a;
-  return t;
-}
-function addGifComment(bytes, text){
-  const packed=bytes[10];
-  const gctSize=(packed&0x80)?3*(1<<((packed&0x07)+1)):0;
-  const insertAt=6+7+gctSize;             // ヘッダ+論理画面記述子+GCT の直後
-  const enc=new TextEncoder().encode(text);
-  const ext=[0x21,0xFE];                   // Comment Extension
-  for(let i=0;i<enc.length;i+=255){
-    const slice=enc.subarray(i,i+255);
-    ext.push(slice.length); slice.forEach(b=>ext.push(b));
-  }
-  ext.push(0x00);
-  const e=new Uint8Array(ext);
-  const out=new Uint8Array(bytes.length+e.length);
-  out.set(bytes.subarray(0,insertAt),0);
-  out.set(e,insertAt);
-  out.set(bytes.subarray(insertAt), insertAt+e.length);
-  return out;
 }
 // iOSは共有シート→「写真に保存」で保存。非対応環境はダウンロードに切替
 async function saveOrShare(blob, filename, fallbackMsg){
@@ -1867,33 +1751,9 @@ function unsharpMask(cv, amount, radius){
   ctx.putImageData(img,0,0);
 }
 $('saveBtn').onclick=()=>{
-  if(mode==='glitch'){ saveGif(); return; }
   const {blob, filename, longEdge}=buildExportBlob();
   saveOrShare(blob, filename, 'Saved (long edge '+longEdge+'px)');
 };
-
-function saveGif(){
-  if(typeof GIF==='undefined'){ toast('GIF library not loaded (retry online)'); return; }
-  const longEdge=480;
-  const cw=composed.width, ch=composed.height, sc=longEdge/Math.max(cw,ch);
-  const w=Math.round(cw*sc), h=Math.round(ch*sc);
-  const base=makeBase(w,h);
-  const tmp=document.createElement('canvas'); tmp.width=w; tmp.height=h;
-  const tctx=tmp.getContext('2d');
-  const gif=new GIF({workers:2, quality:10, width:w, height:h, workerScript:GIF_WORKER});
-  for(let f=0; f<GFRAMES; f++){
-    drawGlitch(base, tctx, w, h, glitchSeed*GFRAMES+f);
-    gif.addFrame(tctx, {copy:true, delay:glitchSpeed});
-  }
-  gif.on('finished', async blob=>{
-    try{
-      const buf=new Uint8Array(await blob.arrayBuffer());
-      blob=new Blob([addGifComment(buf, metaText())], {type:'image/gif'});
-    }catch(e){}
-    saveOrShare(blob, fileStamp()+'.gif', 'GIF saved');
-  });
-  toast('Generating GIF…'); gif.render();
-}
 
 document.querySelectorAll('#ratiobar button').forEach(b=>{
   b.onclick=()=>{
@@ -1908,6 +1768,17 @@ document.querySelectorAll('#ratiobar button').forEach(b=>{
 video.addEventListener('loadedmetadata',layoutFrame);
 window.addEventListener('resize',layoutFrame);
 window.addEventListener('orientationchange',()=>setTimeout(layoutFrame,300));
+
+// バックグラウンド（タブ非表示・画面ロック・他アプリ）でカメラを停止して発熱を抑制
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){
+    if(stream) stream.getVideoTracks().forEach(t=>t.enabled=false);
+    try{ video.pause(); }catch(e){}
+  } else {
+    const onCam=$('camView').style.display!=='none';
+    if(onCam && stream){ stream.getVideoTracks().forEach(t=>t.enabled=true); try{ const p=video.play(); if(p&&p.catch) p.catch(()=>{}); }catch(e){} }
+  }
+});
 
 // --- zoom（画面を押しながら上下ドラッグ／ピンチ） ---
 function setZoom(z){
