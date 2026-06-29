@@ -42,15 +42,6 @@
     letter-spacing:.04em;}
   #app{position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden;}
 
-  /* top bar */
-  .topbar{display:flex;align-items:center;justify-content:space-between;
-    padding:calc(env(safe-area-inset-top) + 14px) 18px 12px;
-    border-bottom:1px solid var(--line);position:relative;z-index:3;}
-  .brand{font-size:13px;letter-spacing:.34em;font-weight:600;}
-  .brand .dot{color:var(--accent);}
-  .counter{font-size:12px;color:var(--dim);}
-  .counter b{color:var(--ink);font-weight:600;}
-
   /* stage */
   .stage{position:relative;flex:1;overflow:hidden;background:#000;}
   video,#result{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
@@ -146,20 +137,6 @@
   /* result / edit view */
   #editView{display:none;flex-direction:column;height:100%;}
   .editControls{display:flex;flex-direction:column;min-height:0;}
-  .layers{background:var(--panel);border-top:1px solid var(--line);
-    max-height:42vh;overflow-y:auto;padding:6px 0 calc(env(safe-area-inset-bottom) + 6px);}
-  .layer{display:flex;align-items:center;gap:10px;padding:9px 16px;
-    border-bottom:1px solid var(--line);}
-  .layer .lchip{width:26px;height:26px;border-radius:2px;flex:0 0 auto;
-    border:1px solid rgba(255,255,255,.15);}
-  .layer .lmeta{flex:1;min-width:0;}
-  .layer .lname{font-size:10px;color:var(--dim);margin-bottom:5px;}
-  .layer select{width:100%;background:var(--field);color:var(--ink);border:1px solid var(--line);
-    padding:6px 8px;font-size:12px;border-radius:2px;}
-  .layer .lop{flex:0 0 84px;}
-  .layer input[type=range]{width:100%;}
-  .layer .reroll{flex:0 0 auto;background:none;border:1px solid var(--line);
-    color:var(--ink);width:34px;height:34px;border-radius:2px;cursor:pointer;font-size:14px;}
   .adv-toggle{width:100%;background:var(--panel);border:none;border-top:1px solid var(--line);
     color:var(--dim);font-size:11px;letter-spacing:.16em;padding:11px;cursor:pointer;
     font-family:inherit;text-align:center;}
@@ -211,12 +188,8 @@
     background:none;border:none;color:var(--accent);
     font-size:15px;letter-spacing:.1em;font-weight:600;cursor:pointer;
     text-shadow:0 1px 6px rgba(0,0,0,.9);z-index:2;padding:6px;}
-  .hint{position:absolute;top:58px;left:50%;transform:translateX(-50%);
-    font-size:10px;color:var(--dim);background:rgba(0,0,0,.4);
-    padding:5px 12px;border-radius:2px;}
   /* 横向き：左にサムネイル、右にコントロール（シャッター中央固定） */
   @media (orientation: landscape){
-    .topbar{display:none;}
     .brand-inline{display:none;}
     .brandCorner{display:block;}
     .camBottom{inset:0; left:0; top:0; right:0; bottom:0; width:auto;
@@ -369,7 +342,7 @@ The application is provided "as is", without warranty of any kind, express or im
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
 /*! Abstra © 2026 A-Mashiro. All rights reserved. Unauthorized use prohibited. */
-const APP_VERSION='v15.4';
+const APP_VERSION='v15.6';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
@@ -411,14 +384,6 @@ function toast(msg){
   clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),1800);
 }
 
-// --- color sampling: 写真内の1ピクセルを完全ランダムに抽出 ---
-function sampleColor(canvas){
-  const w=canvas.width,h=canvas.height;
-  const d=canvas.getContext('2d').getImageData(0,0,w,h).data;
-  const x=(Math.random()*w)|0, y=(Math.random()*h)|0;
-  const p=(y*w+x)*4;
-  return {r:d[p],g:d[p+1],b:d[p+2]};
-}
 
 // --- 2〜5色を抽出。支配色（面積が大きい色）の偏りを抑える ---
 // 色頻度を集計し、weight = freq^0.6（約6割に圧縮）で重み付け抽選
@@ -523,7 +488,6 @@ function treat(src, colors, levels){
   mctx.putImageData(img,0,0);
   return mo;
 }
-function grad(p){ return 'linear-gradient(135deg,'+p.colors.map(rgb).join(',')+')'; }
 
 function frameRect(){
   const stage=document.querySelector('#camView .stage');
@@ -623,8 +587,6 @@ async function removeText(canvas){
     ctx.fillRect(x,y,ww,hh);
   });
 }
-
-function rgb(c){return `rgb(${c.r|0},${c.g|0},${c.b|0})`;}
 
 function removeAt(i){ if(photos[i]){ photos.splice(i,1); renderStrip(); } }
 
@@ -1049,12 +1011,12 @@ function applyEffect(){
   }
   else if(effect==='roughpencil'){
     // 鉛筆／色鉛筆／荒い鉛筆：複数方向のハッチングを重ね描き（濃い所ほど多く重なる）
-    const rough=true, colored=false;
+    const rough=true;
     const img=octx.getImageData(0,0,w,h), d=img.data, n=w*h;
     const gray=new Float32Array(n), inv=new Float32Array(n);
     for(let i=0;i<n;i++){ const j=i*4, g=0.299*d[j]+0.587*d[j+1]+0.114*d[j+2]; gray[i]=g; inv[i]=255-g; }
     const binv=rough?null:boxBlur1(inv,w,h,Math.max(2, Math.round(Math.min(w,h)/130)));
-    const sp=Math.max(2, Math.round(Math.min(w,h)/(rough?150:colored?820:880)));   // ストローク尺度（鉛筆系は細かく）
+    const sp=Math.max(2, Math.round(Math.min(w,h)/(rough?150:880)));   // ストローク尺度（鉛筆系は細かく）
     const roughMul=5+Math.random()*5;                     // 粗い鉛筆の濃淡サイズ 5〜10倍（生成ごとにランダム）
     const paper=[246,243,235], graphite=[40,38,36];
     const A=[0.40, 1.25, 2.05, 0.85];                      // 多方向（水平/垂直を避ける）
@@ -1097,12 +1059,7 @@ function applyEffect(){
       const lineW=rough?0.6:0.85;
       const drawn=Math.max(ink, strongLine*lineW);
       const pl=rough ? 1 : (1-0.055*vnoise(x/pt+5, y/pt+5));        // rough は紙目を省略
-      if(colored){
-        const sr=d[j], sg=d[j+1], sb=d[j+2], amt=Math.min(1, drawn);
-        d[j]  =Math.max(0,Math.min(255, (paper[0]+(sr-paper[0])*amt)*pl));
-        d[j+1]=Math.max(0,Math.min(255, (paper[1]+(sg-paper[1])*amt)*pl));
-        d[j+2]=Math.max(0,Math.min(255, (paper[2]+(sb-paper[2])*amt)*pl));
-      } else {
+      {
         const t=1-Math.min(1, drawn);
         d[j]  =Math.max(0,Math.min(255, (graphite[0]+(paper[0]-graphite[0])*t)*pl));
         d[j+1]=Math.max(0,Math.min(255, (graphite[1]+(paper[1]-graphite[1])*t)*pl));
@@ -1207,57 +1164,6 @@ function applyEffect(){
     }
     octx.putImageData(img,0,0);
   }
-  else if(effect==='ripple'){
-    // 物体のシルエットから同心の波紋が広がる：輪郭からの距離場で波紋リングを描く
-    const nn=w*h, f=Math.min(w,h);
-    const img=octx.getImageData(0,0,w,h), d=img.data;
-    const lum=new Float32Array(nn); let mean=0;
-    for(let i=0;i<nn;i++){ const j=i*4; const L=0.299*d[j]+0.587*d[j+1]+0.114*d[j+2]; lum[i]=L; mean+=L; }
-    mean/=nn;
-    const thr=mean*(0.7+Math.random()*0.25);
-    const mask=new Uint8Array(nn); let cntLo=0;
-    for(let i=0;i<nn;i++){ if(lum[i]<thr){ mask[i]=1; cntLo++; } }
-    if(cntLo>nn*0.5){ for(let i=0;i<nn;i++) mask[i]=mask[i]?0:1; }   // 物体（少数側）をシルエットに
-    // 距離変換（2パス チャンファ）：シルエット境界からの距離
-    const INF=1e9, D=new Float32Array(nn), SQ=Math.SQRT2;
-    for(let i=0;i<nn;i++) D[i]=mask[i]?0:INF;
-    for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const i=y*w+x; if(D[i]===0) continue; let v=D[i];
-      if(x>0){ const c=D[i-1]+1; if(c<v)v=c; }
-      if(y>0){ const c=D[i-w]+1; if(c<v)v=c; }
-      if(x>0&&y>0){ const c=D[i-w-1]+SQ; if(c<v)v=c; }
-      if(x<w-1&&y>0){ const c=D[i-w+1]+SQ; if(c<v)v=c; }
-      D[i]=v; }
-    for(let y=h-1;y>=0;y--) for(let x=w-1;x>=0;x--){ const i=y*w+x; let v=D[i];
-      if(x<w-1){ const c=D[i+1]+1; if(c<v)v=c; }
-      if(y<h-1){ const c=D[i+w]+1; if(c<v)v=c; }
-      if(x<w-1&&y<h-1){ const c=D[i+w+1]+SQ; if(c<v)v=c; }
-      if(x>0&&y<h-1){ const c=D[i+w-1]+SQ; if(c<v)v=c; }
-      D[i]=v; }
-    const wl=f*(0.02+Math.random()*0.045);      // 波紋の間隔
-    const maxD=f*(0.5+Math.random()*0.7);        // 波紋が届く距離（広め）
-    const phase=Math.random()*6.283;
-    const baseHue=Math.random();                  // 波紋の基準色相
-    const hueStep=0.10+Math.random()*0.18;        // リング1周ごとの色相シフト（巡って混ざる）
-    const strength=0.55+Math.random()*0.35;
-    const TAU=6.283185;
-    const hsv=(hh,s,v)=>{ hh=(hh-Math.floor(hh))*6; const c=v*s, X=c*(1-Math.abs(hh%2-1)), m=v-c; let r,g,b; const hi=Math.floor(hh)%6;
-      if(hi===0){r=c;g=X;b=0;}else if(hi===1){r=X;g=c;b=0;}else if(hi===2){r=0;g=c;b=X;}else if(hi===3){r=0;g=X;b=c;}else if(hi===4){r=X;g=0;b=c;}else{r=c;g=0;b=X;}
-      return [r+m,g+m,b+m]; };
-    for(let i=0;i<nn;i++){ const j=i*4;
-      const br=d[j], bg=d[j+1], bb=d[j+2];        // 元画像そのままの色を地に
-      const dd=D[i];
-      // 距離で色相が巡るカラフルな波紋（スクリーン加算で重なりが混ざる）
-      const ring=Math.pow(0.5+0.5*Math.sin(dd/wl*TAU+phase), 1.3);
-      const fall=0.30+0.70*Math.max(0,1-dd/maxD);
-      const wgt=ring*fall*strength;
-      const hue=baseHue+(dd/wl)*hueStep;
-      const c=hsv(hue,0.9,255), cr=c[0]*wgt, cg=c[1]*wgt, cb=c[2]*wgt;
-      d[j]=255-(255-br)*(255-cr)/255;
-      d[j+1]=255-(255-bg)*(255-cg)/255;
-      d[j+2]=255-(255-bb)*(255-cb)/255;
-    }
-    octx.putImageData(img,0,0);
-  }
   const cap=octx.getImageData(0,0,w,h), cd=cap.data;
   for(let i=0;i<cd.length;i+=4){
     if(cd[i]>245) cd[i]=245;
@@ -1331,7 +1237,7 @@ document.addEventListener('click',(e)=>{
   if(retakeArmed && !e.target.closest('#backBtn')) disarmRetake();
 });
 
-const FX_LIST=['normal','noise','8bit','16bit','invert','rgbshift','copier','silkscreen','risograph','dither','pixelsort','roughpencil','spraypaint','neon','ripple'];
+const FX_LIST=['normal','noise','8bit','16bit','invert','rgbshift','copier','silkscreen','risograph','dither','pixelsort','roughpencil','spraypaint','neon'];
 let fxSeed=(Math.random()*4294967296)>>>0;   // エフェクトの乱数シード（合成ごとに固定）
 function randomizeStyle(){
   effect=FX_LIST[(Math.random()*FX_LIST.length)|0];
@@ -1373,7 +1279,7 @@ const EFFECT_LABELS={normal:'Normal',noise:'Noise','8bit':'8bit','16bit':'16bit'
   invert:'Invert',rgbshift:'RGB Shift',
   copier:'Copier',silkscreen:'Silkscreen',
   risograph:'Risograph',dither:'Dither',pixelsort:'Pixel Sort',
-  roughpencil:'Rough Pencil',spraypaint:'Lacquer Spray',neon:'Neon',ripple:'Ripple'};
+  roughpencil:'Rough Pencil',spraypaint:'Lacquer Spray',neon:'Neon'};
 const BLEND_LABELS=Object.fromEntries(BLENDS); // 値→表示名
 function blendReadout(){
   if(!photos.length) return '—';
@@ -1416,13 +1322,6 @@ $('advToggle').onclick=()=>{
   $('advToggle').textContent=open?'Adjust ▾':'Adjust ▸';
 };
 
-function dataURLtoBlob(durl){
-  const [head,b64]=durl.split(',');
-  const mime=(head.match(/:(.*?);/)||[])[1]||'application/octet-stream';
-  const bin=atob(b64), arr=new Uint8Array(bin.length);
-  for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
-  return new Blob([arr],{type:mime});
-}
 function dataURLtoBytes(durl){
   const bin=atob(durl.split(',')[1]); const arr=new Uint8Array(bin.length);
   for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
