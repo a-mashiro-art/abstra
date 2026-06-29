@@ -369,7 +369,7 @@ The application is provided "as is", without warranty of any kind, express or im
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
 /*! Abstra © 2026 A-Mashiro. All rights reserved. Unauthorized use prohibited. */
-const APP_VERSION='v15.3';
+const APP_VERSION='v15.4';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
@@ -941,25 +941,6 @@ function applyEffect(){
   }
   else if(effect==='8bit'){ retro(octx,w,h,128,4); }
   else if(effect==='16bit'){ retro(octx,w,h,256,8); }
-  else if(effect==='scanlines'){
-    octx.globalCompositeOperation='multiply';
-    octx.fillStyle='rgba(0,0,0,0.55)';
-    const gap=Math.max(2, Math.round(h/360));
-    for(let y=0;y<h;y+=gap*2) octx.fillRect(0,y,w,gap);
-    octx.globalCompositeOperation='source-over';
-  }
-  else if(effect==='halftone'){
-    const src=octx.getImageData(0,0,w,h).data;
-    const cell=Math.max(4, Math.round(Math.min(w,h)/110));
-    octx.fillStyle='#0b0b0d'; octx.fillRect(0,0,w,h);
-    for(let y=0;y<h;y+=cell)for(let x=0;x<w;x+=cell){
-      const cx=Math.min(w-1,x+(cell>>1)), cy=Math.min(h-1,y+(cell>>1));
-      const p=(cy*w+cx)*4, r=src[p],g=src[p+1],b=src[p+2];
-      const lum=(0.299*r+0.587*g+0.114*b)/255, rad=(cell/2)*lum*1.25;
-      if(rad>0.3){ octx.beginPath(); octx.fillStyle='rgb('+r+','+g+','+b+')';
-        octx.arc(x+cell/2,y+cell/2,rad,0,6.2832); octx.fill(); }
-    }
-  }
   else if(effect==='invert'){
     const img=octx.getImageData(0,0,w,h), dd=img.data;
     for(let i=0;i<dd.length;i+=4){ dd[i]=255-dd[i]; dd[i+1]=255-dd[i+1]; dd[i+2]=255-dd[i+2]; }
@@ -973,24 +954,6 @@ function applyEffect(){
       dd[p]=copy[(y*w+rx)*4]; dd[p+2]=copy[(y*w+bx)*4+2];
     }
     octx.putImageData(img,0,0);
-  }
-  else if(effect==='bloom'){
-    // 明るい部分を抽出→ぼかし→スクリーン合成でふんわり発光
-    const tmp=document.createElement('canvas'); tmp.width=w; tmp.height=h;
-    const tctx=tmp.getContext('2d');
-    tctx.drawImage(composed,0,0);
-    const im=tctx.getImageData(0,0,w,h), dd=im.data;
-    for(let i=0;i<dd.length;i+=4){
-      const lum=0.299*dd[i]+0.587*dd[i+1]+0.114*dd[i+2];
-      const k = lum>150 ? 1 : 0;            // 明部のみ
-      dd[i]*=k; dd[i+1]*=k; dd[i+2]*=k;
-    }
-    tctx.putImageData(im,0,0);
-    octx.globalCompositeOperation='screen';
-    octx.filter='blur('+Math.max(4, Math.min(w,h)*0.02)+'px)';
-    octx.drawImage(tmp,0,0);
-    octx.filter='none';
-    octx.globalCompositeOperation='source-over';
   }
   else if(effect==='copier'){
     // コピー機風：白黒ハイコントラスト＋トナーのザラつき（1bit化）
@@ -1084,9 +1047,9 @@ function applyEffect(){
     }
     octx.putImageData(img,0,0);
   }
-  else if(effect==='pencil' || effect==='coloredpencil' || effect==='roughpencil'){
+  else if(effect==='roughpencil'){
     // 鉛筆／色鉛筆／荒い鉛筆：複数方向のハッチングを重ね描き（濃い所ほど多く重なる）
-    const rough=(effect==='roughpencil'), colored=(effect==='coloredpencil');
+    const rough=true, colored=false;
     const img=octx.getImageData(0,0,w,h), d=img.data, n=w*h;
     const gray=new Float32Array(n), inv=new Float32Array(n);
     for(let i=0;i<n;i++){ const j=i*4, g=0.299*d[j]+0.587*d[j+1]+0.114*d[j+2]; gray[i]=g; inv[i]=255-g; }
@@ -1145,70 +1108,6 @@ function applyEffect(){
         d[j+1]=Math.max(0,Math.min(255, (graphite[1]+(paper[1]-graphite[1])*t)*pl));
         d[j+2]=Math.max(0,Math.min(255, (graphite[2]+(paper[2]-graphite[2])*t)*pl));
       }
-    }
-    octx.putImageData(img,0,0);
-  }
-  else if(effect==='scratch'){
-    // 擦れ（スレ）：方向性のある掠れで塗りが剥げ、下地が筋状に出る
-    const img=octx.getImageData(0,0,w,h), d=img.data, n=w*h;
-    const sp=Math.max(2, Math.round(Math.min(w,h)/420));
-    const sub=[236,233,225];
-    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-      const j=(y*w+x)*4;
-      const streak=vnoise((x*0.98+y*0.05)/(sp*22), y/(sp*1.1));        // 横に長い擦れ筋
-      const fine=vnoise(x/(sp*0.7), y/(sp*0.7));
-      let wear=streak<0.44 ? (0.44-streak)/0.44 : 0;                   // 筋状に剥げる
-      wear=Math.min(1, wear*(0.5+0.8*fine)*1.5);                       // ざらつきで途切れ
-      const gn=(Math.random()-0.5)*10;
-      d[j]  =Math.max(0,Math.min(255, d[j]  +(sub[0]-d[j]  )*wear+gn));
-      d[j+1]=Math.max(0,Math.min(255, d[j+1]+(sub[1]-d[j+1])*wear+gn));
-      d[j+2]=Math.max(0,Math.min(255, d[j+2]+(sub[2]-d[j+2])*wear+gn));
-    }
-    octx.putImageData(img,0,0);
-  }
-  else if(effect==='watercolor'){
-    // 水彩（再解釈）：透明な重ね発色／wet-on-wetの滲み／顔料の粒状／縁の溜まり／水たまりの抜け／細かい紙
-    const img=octx.getImageData(0,0,w,h), d=img.data, n=w*h;
-    const c0=new Float32Array(n),c1=new Float32Array(n),c2=new Float32Array(n);
-    for(let i=0;i<n;i++){ const j=i*4; c0[i]=d[j];c1[i]=d[j+1];c2[i]=d[j+2]; }
-    const f=Math.min(w,h);
-    const Rp=Math.max(4, Math.round(f/80));
-    const blurN=a=>{ let t=a; for(let k=0;k<4;k++) t=boxBlur1(t,w,h,Rp); return t; }; // 4回＝丸い大滲み（軽量化）
-    const b0=blurN(c0), b1=blurN(c1), b2=blurN(c2);
-    const amp=f*0.11, gS=Math.max(1.5,f/600), pt=Math.max(1.3,f/1200); // うねり大＝形を溶かして混ぜる
-    const paper=[250,249,245];                            // 明るい紙白（光は紙から）
-    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-      const i=y*w+x, j=i*4;
-      // wet-on-wet：有機的な2オクターブの大きなうねりで形・輪郭を溶かして混ぜる
-      const wx=((vnoise(x/(f*0.16)+1,y/(f*0.16)+1)-0.5)+(vnoise(x/(f*0.06)+7,y/(f*0.06)+7)-0.5)*0.6)*amp;
-      const wy=((vnoise(x/(f*0.16)+9,y/(f*0.16)+9)-0.5)+(vnoise(x/(f*0.06)+3,y/(f*0.06)+3)-0.5)*0.6)*amp;
-      let sx=Math.round(x+wx), sy=Math.round(y+wy);
-      sx=sx<0?0:sx>=w?w-1:sx; sy=sy<0?0:sy>=h?h-1:sy;
-      const si=sy*w+sx;
-      let r=b0[si], g=b1[si], bb=b2[si];
-      const mean=(r+g+bb)/3;
-      r=mean+(r-mean)*1.45; g=mean+(g-mean)*1.45; bb=mean+(bb-mean)*1.45; // 鮮やかさ（彩度）をオリジナル並みに
-      r=128+(r-128)*1.18; g=128+(g-128)*1.18; bb=128+(bb-128)*1.18;       // 濃淡（コントラスト）を強く
-      // 顔料の濃淡：細かいムラ＋粒状（大きな塊にならないよう細かく）
-      const pool=vnoise(x/(f*0.022)+2, y/(f*0.022)+2);
-      const gran=vnoise(x/gS, y/gS);
-      let dens=Math.min(1,(0.72+0.18*pool)*(0.88+0.22*gran));   // 紙への薄まりを減らし発色を保つ
-      const pl=1-0.045*vnoise(x/pt+5, y/pt+5);                  // 目の細かい紙
-      const gn=(Math.random()-0.5)*6;
-      let R=(paper[0]+(r-paper[0])*dens+gn)*pl;
-      let G=(paper[1]+(g-paper[1])*dens+gn)*pl;
-      let B=(paper[2]+(bb-paper[2])*dens+gn)*pl;
-      d[j]  =Math.max(0,Math.min(255, R));                      // 持ち上げ無し＝濃淡を強く
-      d[j+1]=Math.max(0,Math.min(255, G));
-      d[j+2]=Math.max(0,Math.min(255, B));
-    }
-    const nDot=Math.round(w*h/(f*f)*22);                        // 顔料の飛沫（斑点）
-    for(let t=0;t<nDot;t++){
-      const x0=(Math.random()*w)|0, y0=(Math.random()*h)|0, di=(y0*w+x0)*4;
-      const a=0.35+Math.random()*0.5;
-      const col=[d[di]*0.6, d[di+1]*0.6, d[di+2]*0.6];          // 局所色の濃いアクセント
-      const s=1+(Math.random()<0.45?1:0)+(Math.random()<0.12?1:0);
-      stampDot(d,w,h,x0,y0,s,a,col);
     }
     octx.putImageData(img,0,0);
   }
@@ -1308,68 +1207,6 @@ function applyEffect(){
     }
     octx.putImageData(img,0,0);
   }
-  else if(effect==='gestural'){
-    // ゲスチュラル抽象：白地に多方向の筆致を全画面に重ねる。写真は縮小サンプリングで崩し、毛筆の筋と色ゆらぎで絵具感を出す
-    const f=Math.min(w,h);
-    // 写真を崩す：1/10に縮小サンプリング（細部を消し色面だけ残す）
-    const dsW=Math.max(2,Math.round(w/10)), dsH=Math.max(2,Math.round(h/10));
-    const dc=document.createElement('canvas'); dc.width=dsW; dc.height=dsH;
-    const dcx=dc.getContext('2d'); dcx.imageSmoothingEnabled=true; dcx.drawImage(composed,0,0,dsW,dsH);
-    const ds=dcx.getImageData(0,0,dsW,dsH).data;
-    octx.fillStyle='rgb(248,247,243)'; octx.fillRect(0,0,w,h);
-    octx.save();                                            // 白い部分を塗り色の5〜10%でうっすら埋める
-    octx.globalAlpha=0.1+Math.random()*0.2;
-    octx.imageSmoothingEnabled=true;
-    octx.drawImage(dc,0,0,w,h);
-    octx.restore();
-    octx.lineCap='round'; octx.lineJoin='round';
-    const jt=m=>(Math.random()-0.5)*m;
-    const sampleCol=(px,py,L)=>{
-      let sx=(px/w*dsW)|0, sy=(py/h*dsH)|0; sx=sx<0?0:sx>=dsW?dsW-1:sx; sy=sy<0?0:sy>=dsH?dsH-1:sy;
-      const k=(sy*dsW+sx)*4, v=vivify([ds[k],ds[k+1],ds[k+2]], L);
-      return [v[0]+jt(34), v[1]+jt(34), v[2]+jt(34)];          // 色ゆらぎ（写真から離す）
-    };
-    const N=Math.round(w*h/(f*f)*2600);
-    for(let s=0;s<N;s++){
-      const px=-f*0.05+Math.random()*(w+f*0.1), py=-f*0.05+Math.random()*(h+f*0.1);
-      const ox=jt(f*0.05), oy=jt(f*0.05);                      // 色サンプル位置をずらし写真構造を崩す
-      const col=sampleCol(px+ox,py+oy, 0.42+Math.random()*0.24);
-      const longS=Math.random()<0.24;                          // 短いダブ多め・たまに長い筆
-      const len=longS ? f*(0.07+Math.random()*0.16) : f*(0.012+Math.random()*0.04);
-      const base=f*(longS?0.006:0.004)*(0.6+Math.random()*1.1);
-      const thick=Math.random()<0.5;                           // 細線と太線を混在
-      const wdt=Math.max(1.4, base*(thick?(2+Math.random()*4):(0.4+Math.random()*1.0)));
-      const ang=Math.random()*Math.PI*2;
-      const ux=Math.cos(ang), uy=Math.sin(ang), nx=-uy, ny=ux; // 進行方向と直交
-      const dx=ux*len, dy=uy*len, bend=(Math.random()-0.5)*len*0.5;
-      const cxp=px+nx*bend, cyp=py+ny*bend;                    // 制御点（反り）
-      const a0=0.5+Math.random()*0.4;
-      const nb=2+(Math.random()*3|0);                          // 毛筆の筋（2〜4本）
-      for(let b=0;b<nb;b++){
-        const off=((b+0.5)/nb-0.5)*wdt, jc=jt(24);             // 毛ごとの位置・色差
-        const r=col[0]+jc, g=col[1]+jc, bb=col[2]+jc;
-        const ba=a0*(0.55+Math.random()*0.5);
-        octx.strokeStyle='rgba('+(Math.max(0,Math.min(255,r))|0)+','+(Math.max(0,Math.min(255,g))|0)+','+(Math.max(0,Math.min(255,bb))|0)+','+ba.toFixed(2)+')';
-        octx.lineWidth=Math.max(1, wdt/nb*(0.8+Math.random()*0.7));
-        octx.beginPath();
-        octx.moveTo(px-dx*0.5+nx*off, py-dy*0.5+ny*off);
-        octx.quadraticCurveTo(cxp+nx*off, cyp+ny*off, px+dx*0.5+nx*off, py+dy*0.5+ny*off);
-        octx.stroke();
-      }
-    }
-    // ドリップ：画面各所から絵具が垂れる（偶然の痕跡）
-    const nd=8+(Math.random()*14|0);
-    for(let t=0;t<nd;t++){
-      const px=Math.random()*w, py=Math.random()*h;
-      const col=sampleCol(px,py, 0.4+Math.random()*0.18);
-      const L=f*(0.05+Math.random()*0.35), wd=Math.max(1.5, f*0.003*(0.6+Math.random()));
-      const cs='rgba('+(Math.max(0,Math.min(255,col[0]))|0)+','+(Math.max(0,Math.min(255,col[1]))|0)+','+(Math.max(0,Math.min(255,col[2]))|0)+',';
-      octx.strokeStyle=cs+'0.8)'; octx.lineWidth=wd;
-      octx.beginPath(); octx.moveTo(px,py); octx.lineTo(px+(Math.random()-0.5)*f*0.012, py+L); octx.stroke();
-      octx.fillStyle=cs+'0.85)';
-      octx.beginPath(); octx.arc(px+(Math.random()-0.5)*f*0.012, py+L, wd*1.3, 0, Math.PI*2); octx.fill();
-    }
-  }
   else if(effect==='ripple'){
     // 物体のシルエットから同心の波紋が広がる：輪郭からの距離場で波紋リングを描く
     const nn=w*h, f=Math.min(w,h);
@@ -1420,164 +1257,6 @@ function applyEffect(){
       d[j+2]=255-(255-bb)*(255-cb)/255;
     }
     octx.putImageData(img,0,0);
-  }
-  else if(effect==='zen'){
-    // Zen（石庭）：白い和紙の余白を主体に、画像の顕著な形を数個だけ残す。一部は元の色を残し、点を散らす
-    const nn=w*h, f=Math.min(w,h);
-    const img=octx.getImageData(0,0,w,h), d=img.data;
-    const od=new Uint8ClampedArray(d);                  // 点の色抽出用に元画像を保持
-    const L=new Float32Array(nn);
-    for(let i=0;i<nn;i++){ const j=i*4; L[i]=(0.299*d[j]+0.587*d[j+1]+0.114*d[j+2])/255; }
-    const Rt=Math.max(2, Math.round(f/120)), Ls=boxBlur1(L,w,h,Rt);   // 滑らかな濃淡用にぼかしたトーン場
-    // 1) 縮小グリッドで連結成分を求め、大きい塊を数個だけ残す
-    const SL=200, scl=SL/Math.max(w,h);
-    const sw=Math.max(1,Math.round(w*scl)), sh=Math.max(1,Math.round(h*scl)), sn=sw*sh;
-    const sL=new Float32Array(sn); let smean=0;
-    for(let sy=0;sy<sh;sy++)for(let sx=0;sx<sw;sx++){ const px=Math.min(w-1,((sx+0.5)/sw*w)|0), py=Math.min(h-1,((sy+0.5)/sh*h)|0); const v=L[py*w+px]; sL[sy*sw+sx]=v; smean+=v; }
-    smean/=sn;
-    const thr=smean*(0.78+Math.random()*0.14);
-    const sm=new Uint8Array(sn); let cntLo=0;
-    for(let i=0;i<sn;i++){ if(sL[i]<thr){ sm[i]=1; cntLo++; } }
-    const objDark=!(cntLo>sn*0.5);
-    if(!objDark){ for(let i=0;i<sn;i++) sm[i]=sm[i]?0:1; }   // 物体（少数側）をマスクに
-    // 連結成分ラベリング（4近傍）
-    const lab=new Int32Array(sn).fill(-1), stack=[], comps=[];
-    for(let i=0;i<sn;i++){ if(sm[i]&&lab[i]<0){ const id=comps.length; let area=0; stack.length=0; stack.push(i); lab[i]=id;
-      while(stack.length){ const c=stack.pop(); area++; const cx=c%sw, cy=(c/sw)|0;
-        if(cx>0&&sm[c-1]&&lab[c-1]<0){lab[c-1]=id;stack.push(c-1);}
-        if(cx<sw-1&&sm[c+1]&&lab[c+1]<0){lab[c+1]=id;stack.push(c+1);}
-        if(cy>0&&sm[c-sw]&&lab[c-sw]<0){lab[c-sw]=id;stack.push(c-sw);}
-        if(cy<sh-1&&sm[c+sw]&&lab[c+sw]<0){lab[c+sw]=id;stack.push(c+sw);}
-      }
-      comps.push({id,area});
-    }}
-    comps.sort((a,b)=>b.area-a.area);
-    const minA=Math.max(3, sn*0.004), keepN=3+(Math.random()*4|0);   // 3〜6個だけ残す
-    const keep={};
-    for(let m=0, kept=0; m<comps.length && kept<keepN; m++){ if(comps[m].area<minA) break; keep[comps[m].id]={color:Math.random()<0.45}; kept++; }
-    // 2) 和紙の地＋微かなテクスチャ、残す形のみ描画
-    const paper=[251,249,244], ink=[14,12,15], gden=0.8+Math.random()*0.5;
-    for(let i=0;i<nn;i++){ const j=i*4, x=i%w, y=(i/w)|0;
-      let pr=paper[0],pg=paper[1],pb=paper[2];
-      const grain=(fxHash(x,y)-0.5)*5; pr+=grain; pg+=grain; pb+=grain;          // 和紙の粒
-      if(fxHash(x+7,y+3)>0.993){ const sp=16+Math.random()*16; pr-=sp; pg-=sp; pb-=sp; } // まれな繊維の点
-      const sx=Math.min(sw-1,(x*scl)|0), sy=Math.min(sh-1,(y*scl)|0), id=lab[sy*sw+sx], kp=(id>=0)?keep[id]:null;
-      if(kp){
-        let a=(objDark?(thr-L[i]):(L[i]-thr))/0.05+0.5; a=a<0?0:a>1?1:a;          // 形の縁を柔らかく
-        if(a>0){
-          if(kp.color){ const cr=d[j]*0.92, cg=d[j+1]*0.92, cb=d[j+2]*0.92; pr=pr*(1-a)+cr*a; pg=pg*(1-a)+cg*a; pb=pb*(1-a)+cb*a; }   // 元の色を残す
-          else { // 墨：形の内側で画像トーンに応じた滑らかな濃淡（縁=淡, 芯=濃）
-            let tn=objDark?(thr-Ls[i])/thr:(Ls[i]-thr)/(1-thr); tn=tn<0?0:tn>1?1:tn;
-            const dens=Math.pow(tn, gden), dry=(fxHash(x*2,y*2)-0.5)*0.03;
-            const kk=Math.max(0,Math.min(1, a*(0.18+0.82*dens)+dry*a));
-            pr=pr*(1-kk)+ink[0]*kk; pg=pg*(1-kk)+ink[1]*kk; pb=pb*(1-kk)+ink[2]*kk;
-          }
-        }
-      }
-      d[j]=Math.max(0,Math.min(255,pr)); d[j+1]=Math.max(0,Math.min(255,pg)); d[j+2]=Math.max(0,Math.min(255,pb));
-    }
-    // 3) 散らした点（小石のような）
-    const nDot=3+(Math.random()*7|0);
-    for(let kk=0;kk<nDot;kk++){
-      const cx=(Math.random()*w)|0, cy=(Math.random()*h)|0, r=Math.max(1.5,f*(0.004+Math.random()*0.012)), usecol=Math.random()<0.3, sc2=(cy*w+cx)*4;
-      const col=usecol?[od[sc2]*0.9,od[sc2+1]*0.9,od[sc2+2]*0.9]:ink, ri=Math.ceil(r);
-      for(let yy=-ri;yy<=ri;yy++)for(let xx=-ri;xx<=ri;xx++){ if(xx*xx+yy*yy>r*r) continue; const px=cx+xx, py=cy+yy; if(px<0||py<0||px>=w||py>=h) continue; const j2=(py*w+px)*4; d[j2]=col[0]; d[j2+1]=col[1]; d[j2+2]=col[2]; }
-    }
-    octx.putImageData(img,0,0);
-  }
-  else if(effect==='straighten'){
-    // Construct：構成主義的な語彙（テーパー線＋平行/垂直の線族＋回転バー＋円/同心/ドット）。塗りは画像色、線は黒主体
-    const nn=w*h, f=Math.min(w,h);
-    const img=octx.getImageData(0,0,w,h), d=img.data;
-    const c0=new Float32Array(nn), c1=new Float32Array(nn), c2=new Float32Array(nn);
-    for(let i=0;i<nn;i++){ const j=i*4; c0[i]=d[j]; c1[i]=d[j+1]; c2[i]=d[j+2]; }
-    const Rb=Math.max(2, Math.round(f/60));
-    const b0=boxBlur1(c0,w,h,Rb), b1=boxBlur1(c1,w,h,Rb), b2=boxBlur1(c2,w,h,Rb);
-    const cb=v=>v<0?0:v>255?255:v|0;
-    const sampleCol=(x,y)=>{ const xi=Math.max(0,Math.min(w-1,x|0)), yi=Math.max(0,Math.min(h-1,y|0)), k=yi*w+xi; return [b0[k],b1[k],b2[k]]; };
-    const bold=c=>{ const lum=0.299*c[0]+0.587*c[1]+0.114*c[2]; return [cb(lum+(c[0]-lum)*1.7), cb(lum+(c[1]-lum)*1.7), cb(lum+(c[2]-lum)*1.7)]; };
-    const ink=[22,22,26];
-    const HP=Math.PI/2;
-    octx.lineCap='butt';
-    const taperLine=(x1,y1,x2,y2,maxW,col,a)=>{
-      const dx=x2-x1, dy=y2-y1, len=Math.hypot(dx,dy); if(len<1) return;
-      const nx=-dy/len, ny=dx/len, segs=72, up=[], lo=[];
-      for(let i=0;i<=segs;i++){ const t=i/segs, base=maxW*Math.pow(Math.sin(t*Math.PI),0.12)*0.5, jit=(Math.random()-0.5)*maxW*0.03, hw=Math.max(0.5,base+jit), px=x1+dx*t, py=y1+dy*t; up.push([px+nx*hw,py+ny*hw]); lo.push([px-nx*hw,py-ny*hw]); }
-      octx.fillStyle='rgba('+col[0]+','+col[1]+','+col[2]+','+(a==null?0.95:a)+')';
-      octx.beginPath(); octx.moveTo(up[0][0],up[0][1]); for(let i=1;i<up.length;i++)octx.lineTo(up[i][0],up[i][1]); for(let i=lo.length-1;i>=0;i--)octx.lineTo(lo[i][0],lo[i][1]); octx.closePath(); octx.fill();
-    };
-    const bar=(rx,ry,bw,bh,ang,col,outlineOnly)=>{
-      octx.save(); octx.translate(rx,ry); octx.rotate(ang);
-      if(!outlineOnly){ octx.fillStyle='rgba('+col[0]+','+col[1]+','+col[2]+',0.95)'; octx.fillRect(-bw/2,-bh/2,bw,bh); }
-      octx.lineJoin='miter'; octx.lineWidth=Math.max(1.5,f*0.005); octx.strokeStyle='rgba(22,22,26,0.9)'; octx.strokeRect(-bw/2,-bh/2,bw,bh);
-      octx.restore();
-    };
-    const ring=(cx,cy,r,col,mode)=>{
-      if(mode==='dot'){ octx.fillStyle='rgba('+col[0]+','+col[1]+','+col[2]+',0.95)'; octx.beginPath(); octx.arc(cx,cy,r,0,6.283); octx.fill(); return; }
-      if(mode==='concentric'){ octx.fillStyle='rgba('+col[0]+','+col[1]+','+col[2]+',0.92)'; octx.beginPath(); octx.arc(cx,cy,r,0,6.283); octx.fill(); const ic=bold(sampleCol(cx+r*0.3,cy)); octx.fillStyle='rgba('+ic[0]+','+ic[1]+','+ic[2]+',0.95)'; octx.beginPath(); octx.arc(cx,cy,r*0.6,0,6.283); octx.fill(); }
-      octx.lineWidth=Math.max(2,f*0.006); octx.strokeStyle='rgba(22,22,26,0.9)'; octx.beginPath(); octx.arc(cx,cy,r,0,6.283); octx.stroke();
-    };
-    const area=w*h/(f*f);
-    // 線（長い直線＋40%平行2本目＋30%垂直短線）
-    const nLines=Math.round((4+Math.random()*5)*area);
-    for(let k=0;k<nLines;k++){
-      const ang=Math.random()*6.283, long=Math.random()<0.55, len=long?f*(0.6+Math.random()*0.9):f*(0.15+Math.random()*0.4);
-      const cx=Math.random()*w, cy=Math.random()*h, ca=Math.cos(ang), sa=Math.sin(ang);
-      const x1=cx-ca*len/2, y1=cy-sa*len/2, x2=cx+ca*len/2, y2=cy+sa*len/2;
-      const sw=f*(0.004+Math.random()*0.006), col=Math.random()<0.25?bold(sampleCol(cx,cy)):ink;
-      taperLine(x1,y1,x2,y2,sw,col);
-      if(Math.random()<0.4){ const gap=f*(0.01+Math.random()*0.04), len2=len*(0.4+Math.random()*0.45), cp=Math.cos(ang+HP), sp=Math.sin(ang+HP), mx=cx+cp*gap, my=cy+sp*gap; taperLine(mx-ca*len2/2,my-sa*len2/2,mx+ca*len2/2,my+sa*len2/2,sw,col); }
-      if(Math.random()<0.3){ const cnt=1+(Math.random()*3|0), cp=Math.cos(ang+HP), sp=Math.sin(ang+HP); for(let q=0;q<cnt;q++){ const pl=f*(0.03+Math.random()*0.08), t=0.1+Math.random()*0.8, px=x1+ca*len*t, py=y1+sa*len*t, psw=cnt>=2?f*(0.003+Math.random()*0.008):sw; taperLine(px-cp*pl/2,py-sp*pl/2,px+cp*pl/2,py+sp*pl/2,psw,ink); } }
-    }
-    // バー（細長い回転矩形＋30%末端に小矩形＋20%アウトラインのみ）
-    const nBars=Math.round((3+Math.random()*4)*area);
-    for(let k=0;k<nBars;k++){
-      const cx=Math.random()*w, cy=Math.random()*h, ang=Math.random()*6.283, bw=f*(0.012+Math.random()*0.03), bh=f*(0.15+Math.random()*0.75), col=bold(sampleCol(cx,cy)), outline=Math.random()<0.2;
-      bar(cx,cy,bw,bh,ang,col,outline);
-      if(!outline && Math.random()<0.3){ const sh=f*(0.05+Math.random()*0.12), gap=f*(0.02+Math.random()*0.05), ex=cx-Math.sin(ang)*(bh/2+gap+sh/2), ey=cy+Math.cos(ang)*(bh/2+gap+sh/2); bar(ex,ey,bw,sh,ang,col,false); }
-    }
-    // 円（アウトライン／同心リング／ドット）
-    const nC=Math.round((2+Math.random()*4)*area);
-    for(let k=0;k<nC;k++){
-      const r=Math.random()<0.35?f*(0.18+Math.random()*0.3):Math.random()<0.5?f*(0.06+Math.random()*0.12):f*(0.012+Math.random()*0.04);
-      const cx=Math.random()*w, cy=Math.random()*h, dot=r<f*0.05, conc=!dot&&Math.random()<0.4, col=bold(sampleCol(cx,cy));
-      ring(cx,cy,r,col,dot?'dot':conc?'concentric':'outline');
-    }
-  }
-  else if(effect==='twombly'){
-    // Automatic：淡い水彩の地に、フローに沿う鉛筆の流線＋ゆるい手描き曲線（多パスで黒鉛の質感）
-    const nn=w*h, f=Math.min(w,h);
-    const img=octx.getImageData(0,0,w,h), d=img.data;
-    const c0=new Float32Array(nn), c1=new Float32Array(nn), c2=new Float32Array(nn);
-    for(let i=0;i<nn;i++){ const j=i*4; c0[i]=d[j]; c1[i]=d[j+1]; c2[i]=d[j+2]; }
-    const R=Math.max(2, Math.round(f/110));
-    const b0=boxBlur1(c0,w,h,R), b1=boxBlur1(c1,w,h,R), b2=boxBlur1(c2,w,h,R);
-    const paper=[244,242,236], m=0.62;                    // 淡い水彩の地
-    for(let i=0;i<nn;i++){ const j=i*4; d[j]=b0[i]*(1-m)+paper[0]*m; d[j+1]=b1[i]*(1-m)+paper[1]*m; d[j+2]=b2[i]*(1-m)+paper[2]*m; }
-    octx.putImageData(img,0,0);
-    const cbb=v=>v<0?0:v>255?255:v|0;
-    const gg=s=>(Math.random()+Math.random()-1)*s;        // ガウス近似（手のゆらぎ）
-    const sampleCol=(x,y)=>{ const xi=Math.max(0,Math.min(w-1,x|0)), yi=Math.max(0,Math.min(h-1,y|0)), k=yi*w+xi; return [b0[k],b1[k],b2[k]]; };
-    const PAL=[[135,31,8],[196,131,38],[255,69,0],[128,128,128],[65,105,225],[0,191,255],[255,215,0],[154,205,50],[200,40,32]];
-    const pickCol=(x,y)=>{ const r=Math.random(); if(r<0.5) return null; if(r<0.78) return PAL[(Math.random()*PAL.length)|0]; const c=sampleCol(x,y); return [c[0]*0.7,c[1]*0.7,c[2]*0.7]; };
-    const tone=(col,tn)=>{ if(!col){ const bt=tn*(0.2+Math.random()*0.5); return [cbb(bt+gg(3)),cbb(bt-2+gg(2)),cbb(bt-3+gg(2))]; } const fac=Math.max(0.4,Math.min(1,tn/35)); return [cbb(col[0]*fac+gg(4)),cbb(col[1]*fac+gg(3)),cbb(col[2]*fac+gg(3))]; };
-    const MAXW=Math.max(1.4, f*0.0035);
-    octx.lineCap='round'; octx.lineJoin='round';
-    const stroke=pts=>{ if(pts.length<2) return; octx.beginPath(); octx.moveTo(pts[0].x,pts[0].y); for(let i=0;i<pts.length-1;i++){ const xc=(pts[i].x+pts[i+1].x)/2, yc=(pts[i].y+pts[i+1].y)/2; octx.quadraticCurveTo(pts[i].x,pts[i].y,xc,yc); } octx.lineTo(pts[pts.length-1].x,pts[pts.length-1].y); octx.stroke(); };
-    const pencil=(pts,w0,dk,col,passes)=>{ for(let p=0;p<passes;p++){ const ox=gg(0.6), oy=gg(0.6), t0=0.7+Math.random()*0.3, c=tone(col,10+Math.random()*16), al=Math.min(1,dk*t0*(0.85+Math.random()*0.3)); octx.strokeStyle='rgba('+c[0]+','+c[1]+','+c[2]+','+al.toFixed(3)+')'; octx.lineWidth=Math.min(w0*t0*(0.9+Math.random()*0.2),MAXW); const jp=pts.map(pt=>({x:pt.x+gg(0.4)+ox, y:pt.y+gg(0.4)+oy})); stroke(jp); } };
-    const flowTrace=(sx,sy)=>{ const pts=[]; let x=sx,y=sy,ang=Math.random()*6.283; const steps=22+(Math.random()*46|0), ss=f*0.01*(0.7+Math.random()*0.8); for(let s=0;s<steps;s++){ pts.push({x,y}); const fa=vnoise(x/(f*0.55)+7,y/(f*0.55)+7)*12.566; ang=ang*0.72+fa*0.28+gg(0.12); x+=Math.cos(ang)*ss+gg(0.1); y+=Math.sin(ang)*ss+gg(0.1); if(x<-40||x>w+40||y<-40||y>h+40) break; } return pts; };
-    const loose=(cx,cy,size)=>{ const ty=(Math.random()*5)|0, pts=[], np=16+(Math.random()*40|0), tilt=Math.random()*6.283, ct=Math.cos(tilt), stt=Math.sin(tilt);
-      if(ty===0){ const r=size*(0.3+Math.random()*0.7), asp=0.8+Math.random()*0.4, n=30+(Math.random()*30|0), sa=Math.random()*6.283, span=(Math.random()<0.5?6.283+Math.random():6.283-Math.random()*0.8), dx=gg(r*0.05), dy=gg(r*0.05); for(let i=0;i<=n;i++){ const t=i/n, a=sa+span*t, lx=r*asp*Math.cos(a), ly=r/asp*Math.sin(a), dr=t*t; pts.push({x:cx+lx*ct-ly*stt+gg(r*0.012)+dx*dr, y:cy+lx*stt+ly*ct+gg(r*0.012)+dy*dr}); } }
-      else if(ty===1){ const span=Math.PI*(0.3+Math.random()), sa=Math.random()*6.283, r=size*(0.5+Math.random()*0.7); for(let i=0;i<=np;i++){ const t=i/np, a=sa+span*t; pts.push({x:cx+Math.cos(a)*r+gg(r*0.04), y:cy+Math.sin(a)*r+gg(r*0.04)}); } }
-      else if(ty===2){ const len=size*(1+Math.random()*1.5); for(let i=0;i<=np;i++){ const t=i/np, lx=(t-0.5)*len, ly=Math.sin(t*Math.PI*(1.5+Math.random()))*size*(0.2+Math.random()*0.4); pts.push({x:cx+lx*ct-ly*stt+gg(size*0.03), y:cy+lx*stt+ly*ct+gg(size*0.03)}); } }
-      else if(ty===3){ const sa=Math.random()*6.283, rS=size*(0.2+Math.random()*0.4), rE=size*(0.8+Math.random()*0.6), span=Math.PI*(0.5+Math.random()); for(let i=0;i<=np;i++){ const t=i/np, a=sa+span*t, r=rS+(rE-rS)*t; pts.push({x:cx+Math.cos(a)*r+gg(r*0.03), y:cy+Math.sin(a)*r+gg(r*0.03)}); } }
-      else { const r=size*(0.3+Math.random()*0.5), span=Math.PI*(1.2+Math.random()*0.6), sa=Math.random()*6.283; for(let i=0;i<=np;i++){ const t=i/np, a=sa+span*t, rr=r*(1+Math.sin(t*Math.PI*0.8)*0.3); pts.push({x:cx+Math.cos(a)*rr+gg(r*0.04), y:cy+Math.sin(a)*rr+gg(r*0.04)}); } }
-      return pts; };
-    const area=w*h/(f*f);
-    const nTrace=Math.round((22+Math.random()*22)*area);  // 流れる線
-    for(let k=0;k<nTrace;k++){ const sx=Math.random()*w, sy=Math.random()*h; pencil(flowTrace(sx,sy), f*(0.0010+Math.random()*0.0022), 0.45+Math.random()*0.4, pickCol(sx,sy), 2+(Math.random()*2|0)); }
-    const nLoop=Math.round((16+Math.random()*20)*area);   // ゆるい曲線・ループ
-    for(let k=0;k<nLoop;k++){ const cx=Math.random()*w, cy=Math.random()*h; pencil(loose(cx,cy,f*(0.02+Math.random()*0.08)), f*(0.0010+Math.random()*0.002), 0.4+Math.random()*0.4, pickCol(cx,cy), 2+(Math.random()*2|0)); }
   }
   const cap=octx.getImageData(0,0,w,h), cd=cap.data;
   for(let i=0;i<cd.length;i+=4){
