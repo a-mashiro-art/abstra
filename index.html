@@ -369,7 +369,7 @@ The application is provided "as is", without warranty of any kind, express or im
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
 /*! Abstra © 2026 A-Mashiro. All rights reserved. Unauthorized use prohibited. */
-const APP_VERSION='v14.9';
+const APP_VERSION='v15.3';
 const MAX=5, MIN=2;
 const photos=[]; // {src:canvas, color:{r,g,b}, blend, opacity, tinted:canvas}
 let facing='environment', stream=null;
@@ -1422,35 +1422,66 @@ function applyEffect(){
     octx.putImageData(img,0,0);
   }
   else if(effect==='zen'){
-    // Zen：墨絵風。濃淡（にじみ・墨だまり）を残しつつ、暗部は純黒・明部は純白へ極端に分離
+    // Zen（石庭）：白い和紙の余白を主体に、画像の顕著な形を数個だけ残す。一部は元の色を残し、点を散らす
     const nn=w*h, f=Math.min(w,h);
     const img=octx.getImageData(0,0,w,h), d=img.data;
+    const od=new Uint8ClampedArray(d);                  // 点の色抽出用に元画像を保持
     const L=new Float32Array(nn);
     for(let i=0;i<nn;i++){ const j=i*4; L[i]=(0.299*d[j]+0.587*d[j+1]+0.114*d[j+2])/255; }
-    const gamma=0.7+Math.random()*0.5;
-    const center=0.42+Math.random()*0.12;         // 二値化の境
-    const half=0.03+Math.random()*0.05;           // 遷移幅を狭く＝極端なモノクロ
-    const loThr=center-half, hiThr=center+half;
-    const paper=[251,249,244], ink=[10,9,12];      // ほぼ純白・純黒
-    // 掠れ（dry brush）：筆方向に沿った筋状の抜け
-    const kang=Math.random()*Math.PI, kca=Math.cos(kang), ksa=Math.sin(kang);
-    const along=f*(0.12+Math.random()*0.12), across=f*(0.006+Math.random()*0.006);
-    const kasAmt=0.28+Math.random()*0.22;
-    for(let i=0;i<nn;i++){ const j=i*4, x=i%w, y=(i/w)|0;
-      let k=Math.pow(1-L[i], gamma);              // ぼかさず原画の鮮鋭さを保持
-      if(x>0&&x<w-1&&y>0&&y<h-1){ const gx=L[i+1]-L[i-1], gy=L[i+w]-L[i-w]; k=Math.min(1, k+Math.min(1,Math.hypot(gx,gy)*2.4)*0.34); }  // 輪郭の墨だまり
-      let kk;
-      if(k>=hiThr) kk=1;                           // 純黒
-      else if(k<=loThr) kk=0;                      // 純白
-      else { let t=(k-loThr)/(hiThr-loThr); kk=t*t*(3-2*t); }   // 狭い帯をS字で二値寄りに
-      if(kk>0.5){                                   // 墨の部分に掠れ（筆方向の筋で紙を覗かせる）
-        const u=x*kca+y*ksa, v=-x*ksa+y*kca;
-        const st=vnoise(u/along, v/across)*0.7 + vnoise(u/(along*0.4)+11, v/(across*0.5)+11)*0.3;
-        const dry=Math.max(0,Math.min(1, 1-(k-hiThr)/(1-hiThr)));  // 深い墨ほど掠れにくい
-        if(st < kasAmt*(0.45+0.55*dry)) kk=0;
+    const Rt=Math.max(2, Math.round(f/120)), Ls=boxBlur1(L,w,h,Rt);   // 滑らかな濃淡用にぼかしたトーン場
+    // 1) 縮小グリッドで連結成分を求め、大きい塊を数個だけ残す
+    const SL=200, scl=SL/Math.max(w,h);
+    const sw=Math.max(1,Math.round(w*scl)), sh=Math.max(1,Math.round(h*scl)), sn=sw*sh;
+    const sL=new Float32Array(sn); let smean=0;
+    for(let sy=0;sy<sh;sy++)for(let sx=0;sx<sw;sx++){ const px=Math.min(w-1,((sx+0.5)/sw*w)|0), py=Math.min(h-1,((sy+0.5)/sh*h)|0); const v=L[py*w+px]; sL[sy*sw+sx]=v; smean+=v; }
+    smean/=sn;
+    const thr=smean*(0.78+Math.random()*0.14);
+    const sm=new Uint8Array(sn); let cntLo=0;
+    for(let i=0;i<sn;i++){ if(sL[i]<thr){ sm[i]=1; cntLo++; } }
+    const objDark=!(cntLo>sn*0.5);
+    if(!objDark){ for(let i=0;i<sn;i++) sm[i]=sm[i]?0:1; }   // 物体（少数側）をマスクに
+    // 連結成分ラベリング（4近傍）
+    const lab=new Int32Array(sn).fill(-1), stack=[], comps=[];
+    for(let i=0;i<sn;i++){ if(sm[i]&&lab[i]<0){ const id=comps.length; let area=0; stack.length=0; stack.push(i); lab[i]=id;
+      while(stack.length){ const c=stack.pop(); area++; const cx=c%sw, cy=(c/sw)|0;
+        if(cx>0&&sm[c-1]&&lab[c-1]<0){lab[c-1]=id;stack.push(c-1);}
+        if(cx<sw-1&&sm[c+1]&&lab[c+1]<0){lab[c+1]=id;stack.push(c+1);}
+        if(cy>0&&sm[c-sw]&&lab[c-sw]<0){lab[c-sw]=id;stack.push(c-sw);}
+        if(cy<sh-1&&sm[c+sw]&&lab[c+sw]<0){lab[c+sw]=id;stack.push(c+sw);}
       }
-      if(kk>0&&kk<1){ const grn=(fxHash(x,y)-0.5)*0.04; kk=Math.max(0,Math.min(1, kk+grn)); }
-      d[j]=paper[0]*(1-kk)+ink[0]*kk; d[j+1]=paper[1]*(1-kk)+ink[1]*kk; d[j+2]=paper[2]*(1-kk)+ink[2]*kk;
+      comps.push({id,area});
+    }}
+    comps.sort((a,b)=>b.area-a.area);
+    const minA=Math.max(3, sn*0.004), keepN=3+(Math.random()*4|0);   // 3〜6個だけ残す
+    const keep={};
+    for(let m=0, kept=0; m<comps.length && kept<keepN; m++){ if(comps[m].area<minA) break; keep[comps[m].id]={color:Math.random()<0.45}; kept++; }
+    // 2) 和紙の地＋微かなテクスチャ、残す形のみ描画
+    const paper=[251,249,244], ink=[14,12,15], gden=0.8+Math.random()*0.5;
+    for(let i=0;i<nn;i++){ const j=i*4, x=i%w, y=(i/w)|0;
+      let pr=paper[0],pg=paper[1],pb=paper[2];
+      const grain=(fxHash(x,y)-0.5)*5; pr+=grain; pg+=grain; pb+=grain;          // 和紙の粒
+      if(fxHash(x+7,y+3)>0.993){ const sp=16+Math.random()*16; pr-=sp; pg-=sp; pb-=sp; } // まれな繊維の点
+      const sx=Math.min(sw-1,(x*scl)|0), sy=Math.min(sh-1,(y*scl)|0), id=lab[sy*sw+sx], kp=(id>=0)?keep[id]:null;
+      if(kp){
+        let a=(objDark?(thr-L[i]):(L[i]-thr))/0.05+0.5; a=a<0?0:a>1?1:a;          // 形の縁を柔らかく
+        if(a>0){
+          if(kp.color){ const cr=d[j]*0.92, cg=d[j+1]*0.92, cb=d[j+2]*0.92; pr=pr*(1-a)+cr*a; pg=pg*(1-a)+cg*a; pb=pb*(1-a)+cb*a; }   // 元の色を残す
+          else { // 墨：形の内側で画像トーンに応じた滑らかな濃淡（縁=淡, 芯=濃）
+            let tn=objDark?(thr-Ls[i])/thr:(Ls[i]-thr)/(1-thr); tn=tn<0?0:tn>1?1:tn;
+            const dens=Math.pow(tn, gden), dry=(fxHash(x*2,y*2)-0.5)*0.03;
+            const kk=Math.max(0,Math.min(1, a*(0.18+0.82*dens)+dry*a));
+            pr=pr*(1-kk)+ink[0]*kk; pg=pg*(1-kk)+ink[1]*kk; pb=pb*(1-kk)+ink[2]*kk;
+          }
+        }
+      }
+      d[j]=Math.max(0,Math.min(255,pr)); d[j+1]=Math.max(0,Math.min(255,pg)); d[j+2]=Math.max(0,Math.min(255,pb));
+    }
+    // 3) 散らした点（小石のような）
+    const nDot=3+(Math.random()*7|0);
+    for(let kk=0;kk<nDot;kk++){
+      const cx=(Math.random()*w)|0, cy=(Math.random()*h)|0, r=Math.max(1.5,f*(0.004+Math.random()*0.012)), usecol=Math.random()<0.3, sc2=(cy*w+cx)*4;
+      const col=usecol?[od[sc2]*0.9,od[sc2+1]*0.9,od[sc2+2]*0.9]:ink, ri=Math.ceil(r);
+      for(let yy=-ri;yy<=ri;yy++)for(let xx=-ri;xx<=ri;xx++){ if(xx*xx+yy*yy>r*r) continue; const px=cx+xx, py=cy+yy; if(px<0||py<0||px>=w||py>=h) continue; const j2=(py*w+px)*4; d[j2]=col[0]; d[j2+1]=col[1]; d[j2+2]=col[2]; }
     }
     octx.putImageData(img,0,0);
   }
@@ -1621,7 +1652,7 @@ document.addEventListener('click',(e)=>{
   if(retakeArmed && !e.target.closest('#backBtn')) disarmRetake();
 });
 
-const FX_LIST=['normal','noise','8bit','16bit','invert','rgbshift','copier','silkscreen','risograph','dither','pixelsort','roughpencil','spraypaint','neon','ripple','zen'];
+const FX_LIST=['normal','noise','8bit','16bit','invert','rgbshift','copier','silkscreen','risograph','dither','pixelsort','roughpencil','spraypaint','neon','ripple'];
 let fxSeed=(Math.random()*4294967296)>>>0;   // エフェクトの乱数シード（合成ごとに固定）
 function randomizeStyle(){
   effect=FX_LIST[(Math.random()*FX_LIST.length)|0];
@@ -1663,7 +1694,7 @@ const EFFECT_LABELS={normal:'Normal',noise:'Noise','8bit':'8bit','16bit':'16bit'
   invert:'Invert',rgbshift:'RGB Shift',
   copier:'Copier',silkscreen:'Silkscreen',
   risograph:'Risograph',dither:'Dither',pixelsort:'Pixel Sort',
-  roughpencil:'Rough Pencil',spraypaint:'Lacquer Spray',neon:'Neon',ripple:'Ripple',zen:'Zen'};
+  roughpencil:'Rough Pencil',spraypaint:'Lacquer Spray',neon:'Neon',ripple:'Ripple'};
 const BLEND_LABELS=Object.fromEntries(BLENDS); // 値→表示名
 function blendReadout(){
   if(!photos.length) return '—';
